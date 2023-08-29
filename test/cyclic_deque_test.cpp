@@ -199,7 +199,7 @@ TEST(CyclicDequeTest, Iterator) {
 }
 
 TEST(CyclicDequeTest, AppendRange) {
-  std::vector<std::size_t> v(16, -1);
+  std::vector<std::size_t> v(16, 42);
   std::vector<std::size_t> r{2, 3, 4, 5, 6, 7, 8, 9};
 
   ouroboros::cyclic_deque cdeque(v.begin(), v.end());
@@ -226,7 +226,7 @@ TEST(CyclicDequeTest, AppendRange) {
 }
 
 TEST(CyclicDequeTest, PrependRange) {
-  std::vector<std::size_t> v(16, -1);
+  std::vector<std::size_t> v(16, 42);
   std::vector<std::size_t> r{0, 1, 2, 3, 4, 5, 6, 7};
 
   ouroboros::cyclic_deque cdeque(v.begin(), v.end());
