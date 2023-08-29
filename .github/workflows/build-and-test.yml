@@ -1,0 +1,44 @@
+name: build-and-test
+
+on: [push]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Add ./install to $PATH
+        shell: bash
+        run: |
+          echo "${GITHUB_WORKSPACE//'\'/'/'}/install" >> $GITHUB_PATH
+          echo "${GITHUB_WORKSPACE//'\'/'/'}/install/bin" >> $GITHUB_PATH
+
+      - name: Clone Ouroboros
+        uses: actions/checkout@v3
+
+      - name: Clone Google Test
+        uses: actions/checkout@v3
+        with:
+          repository: google/googletest
+          ref: release-1.12.1
+          path: googletest
+
+      - name: CMake Google Test
+        uses: Jaybro/action-cmake@v1
+        with:
+          cmake-source-dir: googletest
+          cmake-build-dir: googletest/build
+          # GTest is build statically but the CMake + Visual Studio combination wants to link against it as being dynamic.
+          # https://github.com/google/googletest/tree/release-1.8.1/googletest#visual-studio-dynamic-vs-static-runtimes
+          cmake-configure-flags: -Dgtest_force_shared_crt=ON
+          cmake-install: true
+
+      - name: CMake Ouroboros
+        uses: Jaybro/action-cmake@v1
+        with:
+          cmake-install: false
+          cmake-ctest: true

@@ -1,0 +1,3 @@
+add_executable(cyclic_deque_minimal cyclic_deque_minimal.cpp)
+set_default_target_properties(cyclic_deque_minimal)
+target_link_libraries(cyclic_deque_minimal PUBLIC Ouroboros::Ouroboros)
