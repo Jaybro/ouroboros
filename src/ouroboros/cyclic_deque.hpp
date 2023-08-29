@@ -288,7 +288,7 @@ class cyclic_deque_iterator {
 
   //! \brief iterator to const_iterator conversion.
   template <bool C_ = Const_, std::enable_if_t<!C_, int> = 0>
-  operator cyclic_deque_iterator<T_, true>() const {
+  operator cyclic_deque_iterator<T_, !C_>() const {
     return {data_, index_};
   }
 

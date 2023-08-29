@@ -3,7 +3,7 @@
 #include <ouroboros/cyclic_deque.hpp>
 
 TEST(CyclicDequeTest, ConstructorDefault) {
-  ouroboros::cyclic_deque<int> cdeque;
+  ouroboros::cyclic_deque<std::size_t> cdeque;
   EXPECT_EQ(cdeque.capacity(), 0);
   EXPECT_EQ(cdeque.size(), 0);
   EXPECT_EQ(cdeque.available(), 0);
@@ -13,7 +13,7 @@ TEST(CyclicDequeTest, ConstructorDefault) {
 }
 
 TEST(CyclicDequeTest, ConstructorCapacity) {
-  std::vector<int> data(10);
+  std::vector<std::size_t> data(10);
   ouroboros::cyclic_deque cdeque(data.begin(), data.end());
   EXPECT_EQ(cdeque.capacity(), data.size());
   EXPECT_EQ(cdeque.size(), 0);
@@ -24,7 +24,7 @@ TEST(CyclicDequeTest, ConstructorCapacity) {
 
 TEST(CyclicDequeTest, ConstructorSize) {
   std::size_t occupied = 4;
-  std::vector<int> data(10);
+  std::vector<std::size_t> data(10);
   ouroboros::cyclic_deque cdeque(data.begin(), data.end(), occupied);
   EXPECT_EQ(cdeque.capacity(), data.size());
   EXPECT_EQ(cdeque.size(), occupied);
@@ -41,7 +41,7 @@ TEST(CyclicDequeTest, ConstructorSize) {
 }
 
 TEST(CyclicDequeTest, LiFoBack) {
-  std::vector<int> buffer(3);
+  std::vector<std::size_t> buffer(3);
   ouroboros::cyclic_deque cdeque(buffer.begin(), buffer.end());
 
   for (std::size_t i = 0; i < cdeque.capacity(); ++i) {
@@ -65,8 +65,8 @@ TEST(CyclicDequeTest, LiFoBack) {
 }
 
 TEST(CyclicDequeTest, LiFoFront) {
-  std::vector<int> buffer(3);
-  ouroboros::cyclic_deque<int> cdeque(buffer.begin(), buffer.end());
+  std::vector<std::size_t> buffer(3);
+  ouroboros::cyclic_deque<std::size_t> cdeque(buffer.begin(), buffer.end());
 
   for (std::size_t i = 0; i < cdeque.capacity(); ++i) {
     cdeque.push_front(i + 1);
@@ -89,7 +89,7 @@ TEST(CyclicDequeTest, LiFoFront) {
 }
 
 TEST(CyclicDequeTest, FiFoBackInserter) {
-  std::vector<int> buffer(3);
+  std::vector<std::size_t> buffer(3);
   ouroboros::cyclic_deque cdeque(buffer.begin(), buffer.end());
 
   for (std::size_t i = 0; i < cdeque.capacity(); ++i) {
@@ -106,7 +106,7 @@ TEST(CyclicDequeTest, FiFoBackInserter) {
 }
 
 TEST(CyclicDequeTest, FiFoFrontInserter) {
-  std::vector<int> buffer(3);
+  std::vector<std::size_t> buffer(3);
   ouroboros::cyclic_deque cdeque(buffer.begin(), buffer.end());
 
   for (std::size_t i = 0; i < cdeque.capacity(); ++i) {
@@ -123,7 +123,7 @@ TEST(CyclicDequeTest, FiFoFrontInserter) {
 }
 
 TEST(CyclicDequeTest, Iterator) {
-  std::vector<int> buffer(4);
+  std::vector<std::size_t> buffer(4);
   ouroboros::cyclic_deque cdeque(buffer.begin(), buffer.end());
   cdeque.push_back(39);
   cdeque.push_back(40);
@@ -164,7 +164,8 @@ TEST(CyclicDequeTest, Iterator) {
   {
     auto it = --const_cdeque.end();
     for (std::size_t i = 0; i < const_cdeque.size(); ++i) {
-      EXPECT_EQ(it[-i], const_cdeque[const_cdeque.size() - i - 1]);
+      auto si = static_cast<std::ptrdiff_t>(i);
+      EXPECT_EQ(it[-si], const_cdeque[const_cdeque.size() - i - 1]);
       EXPECT_EQ(*(it - i), const_cdeque[const_cdeque.size() - i - 1]);
       EXPECT_EQ(*(i - it), const_cdeque[const_cdeque.size() - i - 1]);
     }
@@ -174,8 +175,7 @@ TEST(CyclicDequeTest, Iterator) {
   {
     EXPECT_EQ(
         const_cdeque.end() - const_cdeque.begin(),
-        static_cast<typename ouroboros::cyclic_deque<int>::difference_type>(
-            const_cdeque.size()));
+        static_cast<std::ptrdiff_t>(const_cdeque.size()));
     EXPECT_TRUE(const_cdeque.end() > const_cdeque.begin());
     EXPECT_TRUE(const_cdeque.end() >= const_cdeque.begin());
     EXPECT_TRUE(const_cdeque.end() >= const_cdeque.end());
@@ -191,7 +191,7 @@ TEST(CyclicDequeTest, Iterator) {
     }
 
     // Conversion from non-const to const iterator.
-    ouroboros::cyclic_deque<int>::const_iterator cit = cdeque.begin();
+    ouroboros::cyclic_deque<std::size_t>::const_iterator cit = cdeque.begin();
     for (; cit != cdeque.cend(); ++cit) {
       EXPECT_EQ(*cit, 0);
     }
@@ -199,8 +199,8 @@ TEST(CyclicDequeTest, Iterator) {
 }
 
 TEST(CyclicDequeTest, AppendRange) {
-  std::vector<int> v(16, -1);
-  std::vector<int> r{2, 3, 4, 5, 6, 7, 8, 9};
+  std::vector<std::size_t> v(16, -1);
+  std::vector<std::size_t> r{2, 3, 4, 5, 6, 7, 8, 9};
 
   ouroboros::cyclic_deque cdeque(v.begin(), v.end());
   cdeque.push_back(0);
@@ -226,8 +226,8 @@ TEST(CyclicDequeTest, AppendRange) {
 }
 
 TEST(CyclicDequeTest, PrependRange) {
-  std::vector<int> v(16, -1);
-  std::vector<int> r{0, 1, 2, 3, 4, 5, 6, 7};
+  std::vector<std::size_t> v(16, -1);
+  std::vector<std::size_t> r{0, 1, 2, 3, 4, 5, 6, 7};
 
   ouroboros::cyclic_deque cdeque(v.begin(), v.end());
   cdeque.push_front(9);
