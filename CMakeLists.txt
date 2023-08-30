@@ -5,7 +5,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils.cmake)
 project(ouroboros
     LANGUAGES CXX
     VERSION 0.1.0
-    DESCRIPTION "Ouroboros is a C++ header only library containing a cyclic deque."
+    DESCRIPTION "Ouroboros is a C++ header only library containing a cyclic deque, aka a circular buffer, that provides a cyclic view of a contiguous sequence."
     HOMEPAGE_URL "https://github.com/Jaybro/ouroboros")
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -28,8 +28,8 @@ if(BUILD_TESTING)
     if(GTEST_FOUND)
         enable_testing()
         add_subdirectory(test)
-        message(STATUS "GTest and Eigen found. Building unit tests.")
+        message(STATUS "GTest found. Building unit tests.")
     else()
-        message(STATUS "GTest and/or Eigen not found. Unit tests will not be build.")
+        message(STATUS "GTest not found. Unit tests will not be build.")
     endif()
 endif()

@@ -20,7 +20,8 @@ using element_type_t = typename element_type<Iterator_>::type;
 //! \brief Wrap \p index from the expected input range of
 //! [start...finish+(finish-start)) between [start...finish).
 template <typename Index_>
-constexpr Index_ wrap_cycle(Index_ index, Index_ start, Index_ finish) {
+constexpr Index_ wrap_cycle(
+    Index_ index, Index_ start, Index_ finish) noexcept {
   if (index >= finish) {
     return index - finish + start;
   } else {
@@ -30,7 +31,7 @@ constexpr Index_ wrap_cycle(Index_ index, Index_ start, Index_ finish) {
 
 //! \brief Increment \p index within the cyclic range [start...finish).
 template <typename Index_>
-constexpr Index_ inc_cycle(Index_ index, Index_ start, Index_ finish) {
+constexpr Index_ inc_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
   ++index;
   if (index == finish) {
     return start;
@@ -41,7 +42,7 @@ constexpr Index_ inc_cycle(Index_ index, Index_ start, Index_ finish) {
 
 //! \brief Decrement \p index within the cyclic range [start...finish).
 template <typename Index_>
-constexpr Index_ dec_cycle(Index_ index, Index_ start, Index_ finish) {
+constexpr Index_ dec_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
   if (index == start) {
     return finish - 1;
   } else {
@@ -66,12 +67,12 @@ struct cyclic_deque_data {
   using size_type = typename element_type_traits<T_>::size_type;
   using pointer = typename element_type_traits<T_>::pointer;
 
-  constexpr cyclic_deque_data()
+  constexpr cyclic_deque_data() noexcept
       : mem_start(), mem_finish(), deq_start(), deq_finish(), deq_size() {}
 
   template <typename ContiguousIterator_>
-  constexpr explicit cyclic_deque_data(
-      ContiguousIterator_ ms, ContiguousIterator_ mf)
+  constexpr cyclic_deque_data(
+      ContiguousIterator_ ms, ContiguousIterator_ mf) noexcept
       : mem_start(&(*ms)),
         mem_finish(&(*mf)),
         deq_start(mem_start),
@@ -80,7 +81,7 @@ struct cyclic_deque_data {
 
   template <typename ContiguousIterator_>
   constexpr cyclic_deque_data(
-      ContiguousIterator_ ms, ContiguousIterator_ mf, size_type n)
+      ContiguousIterator_ ms, ContiguousIterator_ mf, size_type n) noexcept
       : mem_start(&(*ms)),
         mem_finish(&(*mf)),
         deq_start(mem_start),
@@ -155,7 +156,7 @@ struct cyclic_deque_data {
   pointer deq_start;
   //! \brief One past-the-last element for the cycle. The value for deq_finish
   //! is cyclic. Meaning that when the array range is either empty or full,
-  //! deq_start equals deq_finish. Or, when the container is not full, and
+  //! deq_start equals deq_finish. Or, when the cyclic_deque is not full, and
   //! deq_start equals 0, then deq_finish equals size.
   pointer deq_finish;
   size_type deq_size;
@@ -177,9 +178,10 @@ class cyclic_deque_iterator {
   using reference = typename element_traits::reference;
   using iterator_category = std::random_access_iterator_tag;
 
-  cyclic_deque_iterator() = default;
+  constexpr cyclic_deque_iterator() noexcept = default;
 
-  cyclic_deque_iterator(cyclic_data const* data, difference_type index) noexcept
+  constexpr cyclic_deque_iterator(
+      cyclic_data const* data, difference_type index) noexcept
       : data_(data), index_(index) {}
 
   reference operator*() const { return *data_->inner_to_outer(index_); }
@@ -321,71 +323,81 @@ class cyclic_deque {
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  cyclic_deque() = default;
+  constexpr cyclic_deque() noexcept = default;
 
   template <typename ContiguousIterator_>
-  constexpr explicit cyclic_deque(
-      ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish)
+  constexpr cyclic_deque(
+      ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish) noexcept
       : impl_(mem_start, mem_finish) {}
 
   template <typename ContiguousIterator_>
-  constexpr explicit cyclic_deque(
+  constexpr cyclic_deque(
       ContiguousIterator_ mem_start,
       ContiguousIterator_ mem_finish,
-      size_type n)
+      size_type n) noexcept
       : impl_(mem_start, mem_finish, n) {}
 
+  //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
-  constexpr reference operator[](size_type i) const {
+  constexpr reference operator[](size_type i) const noexcept {
     return *impl_.inner_to_outer(i);
   }
 
-  //! \details Undefined behavior if the container is empty.
-  constexpr reference front() const { return head(); }
+  //! \brief Return a reference to the first element of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is empty.
+  constexpr reference front() const noexcept { return head(); }
 
-  //! \details Undefined behavior if the container is empty.
-  constexpr reference back() const { return tail(); }
+  //! \brief Return a reference to the last element of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is empty.
+  constexpr reference back() const noexcept { return tail(); }
 
-  //! \details Undefined behavior if the container is full.
+  //! \brief Add an element to the end of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_back(value_type const& value) {
     assert(!full());
     impl_.inc_finish();
     back() = value;
   }
 
-  //! \details Undefined behavior if the container is full.
+  //! \brief Add an element to the end of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_back(value_type&& value) {
     assert(!full());
     impl_.inc_finish();
     back() = std::move(value);
   }
 
-  //! \details Undefined behavior if the container is empty.
+  //! \brief Remove last element.
+  //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr void pop_back() {
     assert(!empty());
     impl_.dec_finish();
   }
 
-  //! \details Undefined behavior if the container is full.
+  //! \brief Add an element to the begin of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_front(value_type const& value) {
     assert(!full());
     impl_.dec_start();
     front() = value;
   }
 
-  //! \details Undefined behavior if the container is full.
+  //! \brief Add an element to the begin of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_front(value_type&& value) {
     assert(!full());
     impl_.dec_start();
     front() = std::move(value);
   }
 
-  //! \details Undefined behavior if the container is empty.
+  //! \brief Remove first element.
+  //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr void pop_front() {
     assert(!empty());
     impl_.inc_start();
   }
 
+  //! \brief Erase all elements.
   constexpr void clear() noexcept { impl_.clear(); }
 
   //! \brief Append a copy of the elements of range \p rg to the contents of the
