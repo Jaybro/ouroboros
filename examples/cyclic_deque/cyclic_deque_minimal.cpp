@@ -17,7 +17,7 @@ void Print(Range_ const& range, std::string const& name) {
 int main() {
   BufferItem buffer[] = {{-1}, {-1}, {-1}, {-1}};
 
-  ouroboros::cyclic_deque ring(std::begin(buffer), std::end(buffer));
+  ouroboros::cyclic_deque ring(buffer);
   ring.push_back({41});
   ring.push_front({42});
 

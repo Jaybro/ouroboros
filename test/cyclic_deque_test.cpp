@@ -2,38 +2,71 @@
 
 #include <ouroboros/cyclic_deque.hpp>
 
-TEST(CyclicDequeTest, ConstructorDefault) {
-  ouroboros::cyclic_deque<std::size_t> cdeque;
-  EXPECT_EQ(cdeque.capacity(), 0);
-  EXPECT_EQ(cdeque.size(), 0);
-  EXPECT_EQ(cdeque.available(), 0);
-  EXPECT_TRUE(cdeque.empty());
-  // A bit of an oddity, but understandable with 0 capacity.
-  EXPECT_TRUE(cdeque.full());
+namespace {
+
+template <typename T_>
+void ExpectCapacityAndSize(
+    ouroboros::cyclic_deque<T_> const& cdeque,
+    std::size_t capacity,
+    std::size_t size) {
+  EXPECT_EQ(cdeque.capacity(), capacity);
+  EXPECT_EQ(cdeque.size(), size);
+  EXPECT_EQ(cdeque.available(), cdeque.capacity() - size);
+  EXPECT_EQ(cdeque.empty(), size == 0);
+  EXPECT_EQ(cdeque.full(), size == capacity);
 }
 
-TEST(CyclicDequeTest, ConstructorCapacity) {
+}  // namespace
+
+TEST(CyclicDequeTest, ConstructorDefault) {
+  // Note that it will be both empty and full at the same time.
+  ouroboros::cyclic_deque<std::size_t> cdeque;
+  ExpectCapacityAndSize(cdeque, 0, 0);
+}
+
+TEST(CyclicDequeTest, ConstructorIterators) {
   std::vector<std::size_t> data(10);
   ouroboros::cyclic_deque cdeque(data.begin(), data.end());
-  EXPECT_EQ(cdeque.capacity(), data.size());
-  EXPECT_EQ(cdeque.size(), 0);
-  EXPECT_EQ(cdeque.available(), cdeque.capacity());
-  EXPECT_TRUE(cdeque.empty());
-  EXPECT_FALSE(cdeque.full());
+  ExpectCapacityAndSize(cdeque, data.size(), 0);
 }
 
-TEST(CyclicDequeTest, ConstructorSize) {
+TEST(CyclicDequeTest, ConstructorIteratorsSize) {
   std::size_t occupied = 4;
   std::vector<std::size_t> data(10);
   ouroboros::cyclic_deque cdeque(data.begin(), data.end(), occupied);
-  EXPECT_EQ(cdeque.capacity(), data.size());
-  EXPECT_EQ(cdeque.size(), occupied);
-  EXPECT_EQ(cdeque.available(), data.size() - occupied);
-  EXPECT_FALSE(cdeque.empty());
-  EXPECT_FALSE(cdeque.full());
+  ExpectCapacityAndSize(cdeque, data.size(), occupied);
+}
 
-  data.resize(8);
-  cdeque = ouroboros::cyclic_deque(data.begin(), data.end(), 8);
+TEST(CyclicDequeTest, ConstructorArray) {
+  std::size_t data[10];
+  ouroboros::cyclic_deque cdeque(data);
+  ExpectCapacityAndSize(cdeque, std::size(data), 0);
+}
+
+TEST(CyclicDequeTest, ConstructorArraySize) {
+  std::size_t occupied = 4;
+  std::size_t data[10];
+  ouroboros::cyclic_deque cdeque(data, occupied);
+  ExpectCapacityAndSize(cdeque, std::size(data), occupied);
+}
+
+TEST(CyclicDequeTest, ConstructorStdArray) {
+  std::array<std::size_t, 10> data;
+  ouroboros::cyclic_deque cdeque(data);
+  ExpectCapacityAndSize(cdeque, std::size(data), 0);
+}
+
+TEST(CyclicDequeTest, ConstructorStdArraySize) {
+  std::size_t occupied = 4;
+  std::array<std::size_t, 10> data;
+  ouroboros::cyclic_deque cdeque(data, occupied);
+  ExpectCapacityAndSize(cdeque, std::size(data), occupied);
+}
+
+TEST(CyclicDequeTest, FullEmptyClear) {
+  std::size_t occupied = 8;
+  std::vector<std::size_t> data(occupied);
+  ouroboros::cyclic_deque cdeque(data.begin(), data.end(), occupied);
   EXPECT_TRUE(cdeque.full());
   cdeque.clear();
   EXPECT_TRUE(cdeque.empty());

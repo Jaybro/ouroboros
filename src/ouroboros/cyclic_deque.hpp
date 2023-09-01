@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cassert>
 #include <iterator>
 #include <stdexcept>
@@ -11,13 +12,7 @@ namespace ouroboros {
 namespace internal {
 
 template <typename Iterator_>
-struct element_type {
-  using type = std::remove_reference_t<
-      typename std::iterator_traits<Iterator_>::reference>;
-};
-
-template <typename Iterator_>
-using element_type_t = typename element_type<Iterator_>::type;
+using value_type_t = typename std::iterator_traits<Iterator_>::value_type;
 
 //! \brief Wrap \p index from the expected input range of
 //! [start...finish+(finish-start)) between [start...finish).
@@ -74,20 +69,16 @@ struct cyclic_deque_impl {
   constexpr cyclic_deque_impl() noexcept
       : mem_start(), mem_finish(), deq_start(), deq_finish(), deq_size() {}
 
-  template <typename ContiguousIterator_>
-  constexpr cyclic_deque_impl(
-      ContiguousIterator_ ms, ContiguousIterator_ mf) noexcept
-      : mem_start(&(*ms)),
-        mem_finish(&(*mf)),
+  constexpr cyclic_deque_impl(pointer ms, pointer mf) noexcept
+      : mem_start(ms),
+        mem_finish(mf),
         deq_start(mem_start),
         deq_finish(mem_start),
         deq_size() {}
 
-  template <typename ContiguousIterator_>
-  constexpr cyclic_deque_impl(
-      ContiguousIterator_ ms, ContiguousIterator_ mf, size_type n) noexcept
-      : mem_start(&(*ms)),
-        mem_finish(&(*mf)),
+  constexpr cyclic_deque_impl(pointer ms, pointer mf, size_type n) noexcept
+      : mem_start(ms),
+        mem_finish(mf),
         deq_start(mem_start),
         deq_finish(internal::wrap_cycle(deq_start + n, mem_start, mem_finish)),
         deq_size(n) {
@@ -197,13 +188,10 @@ struct cyclic_deque_impl {
   size_type deq_size;
 };
 
-template <typename T_, bool Const_>
+template <typename T_>
 class cyclic_deque_iterator {
-  // NOTE: The two input template arguments can be reduced to a single template
-  // argument using std::basic_const_iterator from C++23.
-  using element_traits =
-      element_type_traits<std::conditional_t<Const_, T_ const, T_>>;
-  using cyclic_data = cyclic_deque_impl<T_>;
+  using element_traits = element_type_traits<T_>;
+  using cyclic_data = cyclic_deque_impl<std::remove_const_t<T_>>;
 
  public:
   using size_type = typename element_traits::size_type;
@@ -324,8 +312,10 @@ class cyclic_deque_iterator {
   }
 
   //! \brief iterator to const_iterator conversion.
-  template <bool C_ = Const_, std::enable_if_t<!C_, int> = 0>
-  operator cyclic_deque_iterator<T_, !C_>() const {
+  template <bool C_ = std::is_const_v<T_>, std::enable_if_t<!C_, int> = 0>
+  operator cyclic_deque_iterator<
+      std::conditional_t<!C_, std::add_const_t<T_>, std::remove_const_t<T_>>>()
+      const {
     return {data_, index_};
   }
 
@@ -343,18 +333,21 @@ class cyclic_deque {
   using cyclic_impl = internal::cyclic_deque_impl<T_>;
   using element_traits = internal::element_type_traits<T_>;
 
+  static_assert(
+      std::is_same_v<std::remove_cv_t<T_>, T_>,
+      "ouroboros::cyclic_deque must have a non-const, non-volatile value_type");
+
  public:
   using size_type = typename element_traits::size_type;
   using difference_type = typename element_traits::difference_type;
   using value_type = typename element_traits::value_type;
-  using element_type = typename element_traits::element_type;
   using pointer = typename element_traits::pointer;
   using const_pointer = typename element_traits::const_pointer;
   using reference = typename element_traits::reference;
   using const_reference = typename element_traits::const_reference;
 
-  using iterator = internal::cyclic_deque_iterator<element_type, false>;
-  using const_iterator = internal::cyclic_deque_iterator<element_type, true>;
+  using iterator = internal::cyclic_deque_iterator<value_type>;
+  using const_iterator = internal::cyclic_deque_iterator<value_type const>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -362,15 +355,30 @@ class cyclic_deque {
 
   template <typename ContiguousIterator_>
   constexpr cyclic_deque(
-      ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish) noexcept
-      : impl_(mem_start, mem_finish) {}
+      ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish)
+      : impl_(&(*mem_start), &(*mem_finish)) {}
 
   template <typename ContiguousIterator_>
   constexpr cyclic_deque(
       ContiguousIterator_ mem_start,
       ContiguousIterator_ mem_finish,
-      size_type n) noexcept
-      : impl_(mem_start, mem_finish, n) {}
+      size_type n)
+      : impl_(&(*mem_start), &(*mem_finish), n) {}
+
+  template <size_type N_>
+  constexpr cyclic_deque(T_ (&mem)[N_]) noexcept : impl_(mem, mem + N_) {}
+
+  template <size_type N_>
+  constexpr cyclic_deque(T_ (&mem)[N_], size_type n) noexcept
+      : impl_(mem, mem + N_, n) {}
+
+  template <size_type N_>
+  constexpr cyclic_deque(std::array<T_, N_>& mem) noexcept
+      : impl_(mem.data(), mem.data() + mem.size()) {}
+
+  template <size_type N_>
+  constexpr cyclic_deque(std::array<T_, N_>& mem, size_type n) noexcept
+      : impl_(mem.data(), mem.data() + mem.size(), n) {}
 
   //! \brief Return a reference to the specified element at \p i, with bounds
   //! checking.
@@ -529,16 +537,28 @@ class cyclic_deque {
   cyclic_impl impl_;
 };
 
-template <class ContiguousIterator_>
+template <typename ContiguousIterator_>
 cyclic_deque(ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish)
-    -> cyclic_deque<internal::element_type_t<ContiguousIterator_>>;
+    -> cyclic_deque<internal::value_type_t<ContiguousIterator_>>;
 
-template <class ContiguousIterator_>
+template <typename ContiguousIterator_>
 cyclic_deque(
     ContiguousIterator_ mem_start,
     ContiguousIterator_ mem_finish,
     typename internal::element_type_traits<
-        internal::element_type_t<ContiguousIterator_>>::size_type n)
-    -> cyclic_deque<internal::element_type_t<ContiguousIterator_>>;
+        internal::value_type_t<ContiguousIterator_>>::size_type n)
+    -> cyclic_deque<internal::value_type_t<ContiguousIterator_>>;
+
+template <typename T_, std::size_t N_>
+cyclic_deque(T_ (&mem)[N_]) -> cyclic_deque<T_>;
+
+template <typename T_, std::size_t N_>
+cyclic_deque(T_ (&mem)[N_], std::size_t n) -> cyclic_deque<T_>;
+
+template <typename T_, std::size_t N_>
+cyclic_deque(std::array<T_, N_>& mem) -> cyclic_deque<T_>;
+
+template <typename T_, std::size_t N_>
+cyclic_deque(std::array<T_, N_>& mem, std::size_t n) -> cyclic_deque<T_>;
 
 }  // namespace ouroboros
