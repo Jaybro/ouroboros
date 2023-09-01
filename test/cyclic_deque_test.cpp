@@ -40,6 +40,11 @@ TEST(CyclicDequeTest, ConstructorSize) {
   EXPECT_EQ(cdeque.begin(), cdeque.end());
 }
 
+TEST(CyclicDequeTest, At) {
+  ouroboros::cyclic_deque<std::size_t> cdeque;
+  EXPECT_THROW(cdeque.at(1), std::out_of_range);
+}
+
 TEST(CyclicDequeTest, LiFoBack) {
   std::vector<std::size_t> buffer(3);
   ouroboros::cyclic_deque cdeque(buffer.begin(), buffer.end());
@@ -250,4 +255,38 @@ TEST(CyclicDequeTest, PrependRange) {
     EXPECT_EQ(cdeque[i], i - r.size());
   }
   EXPECT_EQ(cdeque.size(), r.size() * 2 - 2);
+}
+
+struct Evil {
+  Evil() = default;  // presage
+  Evil(Evil const&) { throw std::runtime_error("malice"); }
+  Evil(Evil&&) { throw std::runtime_error("malice"); }
+  Evil& operator=(Evil const&) { throw std::runtime_error("malice"); }
+  Evil& operator=(Evil&&) { throw std::runtime_error("malice"); }
+  ~Evil() = default;  // serenity
+
+  std::byte noise;
+};
+
+// An exception shouldn't change the state of the deque except for perhaps the
+// contents of the available() part of the capacity(). The latter may happen
+// when the copy itself is not strongly exception safe, overwriting, perhaps
+// partially, an object.
+TEST(CyclicDequeTest, StrongExceptionSafety) {
+  std::vector<Evil> v(4);
+  std::vector<Evil> r(2);
+
+  std::size_t initial_size = 2;
+  ouroboros::cyclic_deque cdeque(v.begin(), v.end(), initial_size);
+
+  Evil singleton, tabs;
+  EXPECT_THROW(cdeque.push_back(singleton), std::runtime_error);
+  EXPECT_THROW(cdeque.push_back(std::move(singleton)), std::runtime_error);
+  EXPECT_THROW(cdeque.push_front(tabs), std::runtime_error);
+  EXPECT_THROW(cdeque.push_front(std::move(tabs)), std::runtime_error);
+  EXPECT_THROW(cdeque.append_range(r), std::runtime_error);
+  EXPECT_THROW(cdeque.prepend_range(r), std::runtime_error);
+  EXPECT_EQ(cdeque.size(), initial_size);
+  EXPECT_EQ(&cdeque[0], &v[0]);
+  EXPECT_EQ(&cdeque[initial_size - 1], &v[initial_size - 1]);
 }

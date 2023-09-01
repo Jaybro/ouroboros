@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <iterator>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 
 namespace ouroboros {
@@ -63,15 +65,17 @@ struct element_type_traits {
 };
 
 template <typename T_>
-struct cyclic_deque_data {
+struct cyclic_deque_impl {
   using size_type = typename element_type_traits<T_>::size_type;
+  using value_type = typename element_type_traits<T_>::value_type;
   using pointer = typename element_type_traits<T_>::pointer;
+  using reference = typename element_type_traits<T_>::reference;
 
-  constexpr cyclic_deque_data() noexcept
+  constexpr cyclic_deque_impl() noexcept
       : mem_start(), mem_finish(), deq_start(), deq_finish(), deq_size() {}
 
   template <typename ContiguousIterator_>
-  constexpr cyclic_deque_data(
+  constexpr cyclic_deque_impl(
       ContiguousIterator_ ms, ContiguousIterator_ mf) noexcept
       : mem_start(&(*ms)),
         mem_finish(&(*mf)),
@@ -80,7 +84,7 @@ struct cyclic_deque_data {
         deq_size() {}
 
   template <typename ContiguousIterator_>
-  constexpr cyclic_deque_data(
+  constexpr cyclic_deque_impl(
       ContiguousIterator_ ms, ContiguousIterator_ mf, size_type n) noexcept
       : mem_start(&(*ms)),
         mem_finish(&(*mf)),
@@ -88,6 +92,82 @@ struct cyclic_deque_data {
         deq_finish(internal::wrap_cycle(deq_start + n, mem_start, mem_finish)),
         deq_size(n) {
     assert(n <= capacity());
+  }
+
+  constexpr pointer inc_cycle(pointer index) const noexcept {
+    return internal::inc_cycle(index, mem_start, mem_finish);
+  }
+
+  constexpr pointer dec_cycle(pointer index) const noexcept {
+    return internal::dec_cycle(index, mem_start, mem_finish);
+  }
+
+  //! \brief Wrap \p index from range [mem_start...mem_start+2n) to range
+  //! [mem_start...mem_start+n), where n equals mem_finish-mem_start.
+  constexpr pointer wrap_cycle(pointer index) const noexcept {
+    return internal::wrap_cycle(index, mem_start, mem_finish);
+  }
+
+  //! \brief Convert an inner address [0...size) to an outer address that falls
+  //! within the cyclic range [deq_start...deq_finish).
+  template <typename Index_>
+  constexpr pointer inner_to_outer(Index_ i) const noexcept {
+    return wrap_cycle(deq_start + i);
+  }
+
+  constexpr reference front() const noexcept { return *deq_start; }
+
+  constexpr reference back() const noexcept { return *dec_cycle(deq_finish); }
+
+ private:
+  constexpr void set_value(value_type const& input, value_type& output) const {
+    output = input;
+  }
+
+  constexpr void set_value(value_type&& input, value_type& output) const {
+    output = std::move(input);
+  }
+
+ public:
+  template <typename U_>
+  constexpr void push_back(U_&& value) {
+    assert(!full());
+    // Strong exception safety: The internal state is only updated after calling
+    // set_value, just in case it throws.
+    set_value(std::forward<U_>(value), *deq_finish);
+    // Increase the size by incrementing the deq_finish index.
+    deq_finish = inc_cycle(deq_finish);
+    ++deq_size;
+  }
+
+  //! \details Unlike pop_back for, for example, an std::vector, this method
+  //! only updates an index and a counter, making it unable to throw an
+  //! exception.
+  constexpr void pop_back() noexcept {
+    assert(!empty());
+    // Decrease the size by decrementing the deq_finish index.
+    deq_finish = dec_cycle(deq_finish);
+    --deq_size;
+  }
+
+  template <typename U_>
+  constexpr void push_front(U_&& value) {
+    assert(!full());
+    pointer dec_deq_start = dec_cycle(deq_start);
+    // Strong exception safety: The internal state is only updated after calling
+    // set_value, just in case it throws.
+    set_value(std::forward<U_>(value), *dec_deq_start);
+    // Increase the size by decrementing the deq_start index.
+    deq_start = dec_deq_start;
+    ++deq_size;
+  }
+
+  //! \see pop_back
+  constexpr void pop_front() noexcept {
+    assert(!empty());
+    // Decrease the size by incrementing the deq_start index.
+    deq_start = inc_cycle(deq_start);
+    --deq_size;
   }
 
   constexpr size_type capacity() const noexcept {
@@ -104,51 +184,6 @@ struct cyclic_deque_data {
     deq_start = mem_start;
     deq_finish = deq_start;
     deq_size = 0;
-  }
-
-  constexpr pointer inc_cycle(pointer index) const noexcept {
-    return internal::inc_cycle(index, mem_start, mem_finish);
-  }
-
-  constexpr pointer dec_cycle(pointer index) const noexcept {
-    return internal::dec_cycle(index, mem_start, mem_finish);
-  }
-
-  //! \brief Decrease the size by incrementing the start index.
-  constexpr void inc_start() noexcept {
-    deq_start = inc_cycle(deq_start);
-    --deq_size;
-  }
-
-  //! \brief Increase the size by decrementing the start index.
-  constexpr void dec_start() noexcept {
-    deq_start = dec_cycle(deq_start);
-    ++deq_size;
-  }
-
-  //! \brief Increase the size by incrementing the finish index.
-  constexpr void inc_finish() noexcept {
-    deq_finish = inc_cycle(deq_finish);
-    ++deq_size;
-  }
-
-  //! \brief Decrease the size by decrementing the finish index.
-  constexpr void dec_finish() noexcept {
-    deq_finish = dec_cycle(deq_finish);
-    --deq_size;
-  }
-
-  //! \brief Wrap \p index from range [mem_start...mem_start+2n) to range
-  //! [mem_start...mem_start+n), where n equals mem_finish-mem_start.
-  constexpr pointer wrap_cycle(pointer index) const noexcept {
-    return internal::wrap_cycle(index, mem_start, mem_finish);
-  }
-
-  //! \brief Convert an inner address [0...size) to an outer address that falls
-  //! within the cyclic range [deq_start...deq_finish).
-  template <typename Index_>
-  constexpr pointer inner_to_outer(Index_ i) const noexcept {
-    return wrap_cycle(deq_start + i);
   }
 
   pointer mem_start;
@@ -168,7 +203,7 @@ class cyclic_deque_iterator {
   // argument using std::basic_const_iterator from C++23.
   using element_traits =
       element_type_traits<std::conditional_t<Const_, T_ const, T_>>;
-  using cyclic_data = cyclic_deque_data<T_>;
+  using cyclic_data = cyclic_deque_impl<T_>;
 
  public:
   using size_type = typename element_traits::size_type;
@@ -305,7 +340,7 @@ class cyclic_deque_iterator {
 
 template <typename T_>
 class cyclic_deque {
-  using cyclic_data = internal::cyclic_deque_data<T_>;
+  using cyclic_impl = internal::cyclic_deque_impl<T_>;
   using element_traits = internal::element_type_traits<T_>;
 
  public:
@@ -337,6 +372,17 @@ class cyclic_deque {
       size_type n) noexcept
       : impl_(mem_start, mem_finish, n) {}
 
+  //! \brief Return a reference to the specified element at \p i, with bounds
+  //! checking.
+  constexpr reference at(size_type i) const {
+    if (i >= size()) {
+      throw std::out_of_range(
+          "cyclic_deque::at: i (which is " + std::to_string(i) +
+          ") >= this->size() (which is " + std::to_string(size()) + ")");
+    }
+    return *impl_.inner_to_outer(i);
+  }
+
   //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
   constexpr reference operator[](size_type i) const noexcept {
@@ -345,57 +391,41 @@ class cyclic_deque {
 
   //! \brief Return a reference to the first element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr reference front() const noexcept { return head(); }
+  constexpr reference front() const noexcept { return impl_.front(); }
 
   //! \brief Return a reference to the last element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr reference back() const noexcept { return tail(); }
+  constexpr reference back() const noexcept { return impl_.back(); }
 
   //! \brief Add an element to the end of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is full.
-  constexpr void push_back(value_type const& value) {
-    assert(!full());
-    impl_.inc_finish();
-    back() = value;
-  }
+  constexpr void push_back(value_type const& value) { impl_.push_back(value); }
 
   //! \brief Add an element to the end of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_back(value_type&& value) {
-    assert(!full());
-    impl_.inc_finish();
-    back() = std::move(value);
+    impl_.push_back(std::move(value));
   }
 
   //! \brief Remove last element.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr void pop_back() {
-    assert(!empty());
-    impl_.dec_finish();
-  }
+  constexpr void pop_back() noexcept { impl_.pop_back(); }
 
   //! \brief Add an element to the begin of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_front(value_type const& value) {
-    assert(!full());
-    impl_.dec_start();
-    front() = value;
+    impl_.push_front(value);
   }
 
   //! \brief Add an element to the begin of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is full.
   constexpr void push_front(value_type&& value) {
-    assert(!full());
-    impl_.dec_start();
-    front() = std::move(value);
+    impl_.push_front(std::move(value));
   }
 
   //! \brief Remove first element.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr void pop_front() {
-    assert(!empty());
-    impl_.inc_start();
-  }
+  constexpr void pop_front() noexcept { impl_.pop_front(); }
 
   //! \brief Erase all elements.
   constexpr void clear() noexcept { impl_.clear(); }
@@ -429,21 +459,23 @@ class cyclic_deque {
     auto rg_size = std::distance(std::begin(rg), std::end(rg));
     assert(static_cast<size_type>(rg_size) <= available());
     // The cyclic_deque is empty when deq_start and mem_start are equal (it can
-    // also be full, but that's treated as undefined behaviour). Because we
-    // don't want a 0 size copy, we move deq_start to mem_finish when deq_start
-    // equals mem_start with the operation below. It results in a no-op
-    // otherwise.
-    impl_.deq_start = impl_.dec_cycle(impl_.deq_start) + 1;
-    auto size2 = impl_.deq_start - impl_.mem_start;
+    // also be full, but that's treated as undefined behaviour). An empty size
+    // would cause the copy to be split into a full size and zero size copy.
+    // Because we don't want a 0 size copy, we move deq_start to mem_finish when
+    // deq_start equals mem_start with the operation below. It results in an
+    // unchanged address otherwise.
+    pointer dec_deq_start = impl_.dec_cycle(impl_.deq_start) + 1;
+    auto size2 = dec_deq_start - impl_.mem_start;
     if (rg_size <= size2) {
-      impl_.deq_start -= rg_size;
-      std::copy(rg.begin(), rg.end(), impl_.deq_start);
+      dec_deq_start -= rg_size;
+      std::copy(rg.begin(), rg.end(), dec_deq_start);
     } else {
       auto split = std::prev(rg.end(), size2);
       std::copy(split, rg.end(), impl_.mem_start);
-      impl_.deq_start = impl_.mem_finish - rg_size + size2;
-      std::copy(rg.begin(), split, impl_.deq_start);
+      dec_deq_start = impl_.mem_finish - rg_size + size2;
+      std::copy(rg.begin(), split, dec_deq_start);
     }
+    impl_.deq_start = dec_deq_start;
     impl_.deq_size += rg_size;
   }
 
@@ -494,13 +526,7 @@ class cyclic_deque {
   }
 
  private:
-  constexpr reference head() const noexcept { return *impl_.deq_start; }
-
-  constexpr reference tail() const noexcept {
-    return *impl_.dec_cycle(impl_.deq_finish);
-  }
-
-  cyclic_data impl_;
+  cyclic_impl impl_;
 };
 
 template <class ContiguousIterator_>

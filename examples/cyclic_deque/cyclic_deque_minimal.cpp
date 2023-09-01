@@ -21,8 +21,8 @@ int main() {
   ring.push_back({41});
   ring.push_front({42});
 
-  Print(ring, "ring");
   Print(buffer, "buffer");
+  Print(ring, "ring");
 
   return 0;
 }
