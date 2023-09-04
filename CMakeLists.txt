@@ -25,8 +25,8 @@ endif()
 find_package(GTest QUIET)
 
 if(GTEST_FOUND)
-    message(STATUS "BUILD_TESTING: ${BUILD_TESTING}")
     include(CTest)
+    message(STATUS "BUILD_TESTING: ${BUILD_TESTING}")
 
     if(BUILD_TESTING)
         enable_testing()
