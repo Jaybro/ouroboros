@@ -73,6 +73,16 @@ TEST(CyclicDequeTest, FullEmptyClear) {
   EXPECT_EQ(cdeque.begin(), cdeque.end());
 }
 
+TEST(CyclicDequeTest, Resize) {
+  std::vector<std::size_t> data(10);
+  ouroboros::cyclic_deque cdeque(data.begin(), data.end(), data.size());
+
+  std::size_t size_four = 4;
+  cdeque.resize(size_four);
+  ExpectCapacityAndSize(cdeque, data.size(), size_four);
+  EXPECT_EQ(cdeque.begin() + size_four, cdeque.end());
+}
+
 TEST(CyclicDequeTest, At) {
   ouroboros::cyclic_deque<std::size_t> cdeque;
   EXPECT_THROW(cdeque.at(1), std::out_of_range);
@@ -290,6 +300,8 @@ TEST(CyclicDequeTest, PrependRange) {
   EXPECT_EQ(cdeque.size(), r.size() * 2 - 2);
 }
 
+// This class may lead to "unreachable code" warnings. Likely because the lines
+// of code that follow after a throw will never be reached.
 struct Evil {
   Evil() = default;  // presage
   Evil(Evil const&) { throw std::runtime_error("malice"); }

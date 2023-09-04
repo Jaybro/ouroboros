@@ -62,6 +62,7 @@ struct element_type_traits {
 template <typename T_>
 struct cyclic_deque_impl {
   using size_type = typename element_type_traits<T_>::size_type;
+  using difference_type = typename element_type_traits<T_>::difference_type;
   using value_type = typename element_type_traits<T_>::value_type;
   using pointer = typename element_type_traits<T_>::pointer;
   using reference = typename element_type_traits<T_>::reference;
@@ -175,6 +176,14 @@ struct cyclic_deque_impl {
     deq_start = mem_start;
     deq_finish = deq_start;
     deq_size = 0;
+  }
+
+  constexpr void resize(size_type n) noexcept {
+    assert(n <= capacity());
+    auto s = static_cast<difference_type>(deq_size);
+    auto d = static_cast<difference_type>(n) - s;
+    deq_finish = wrap_cycle(deq_finish + d);
+    deq_size = static_cast<size_type>(s + d);
   }
 
   pointer mem_start;
@@ -435,9 +444,6 @@ class cyclic_deque {
   //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr void pop_front() noexcept { impl_.pop_front(); }
 
-  //! \brief Erase all elements.
-  constexpr void clear() noexcept { impl_.clear(); }
-
   //! \brief Append a copy of the elements of range \p rg to the contents of the
   //! cyclic_deque. Undefined behavior if available() is not sufficient to
   //! accomodate the range.
@@ -486,6 +492,12 @@ class cyclic_deque {
     impl_.deq_start = dec_deq_start;
     impl_.deq_size += rg_size;
   }
+
+  //! \brief Erase all elements.
+  constexpr void clear() noexcept { impl_.clear(); }
+
+  //! \brief Change the number of stored elements.
+  constexpr void resize(size_type n) noexcept { impl_.resize(n); }
 
   //! \brief Return the maximum number of elements the cyclic_deque can hold.
   constexpr size_type capacity() const noexcept { return impl_.capacity(); }

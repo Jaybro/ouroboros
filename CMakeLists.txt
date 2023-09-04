@@ -16,20 +16,36 @@ set(PROJECT_PACKAGE_NAME "Ouroboros")
 add_subdirectory(src)
 
 option(BUILD_EXAMPLES "Enable the creation of examples." ON)
+message(STATUS "BUILD_EXAMPLES: ${BUILD_EXAMPLES}")
 
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-include(CTest)
 find_package(GTest QUIET)
 
-if(BUILD_TESTING)
-    if(GTEST_FOUND)
+if(GTEST_FOUND)
+    message(STATUS "BUILD_TESTING: ${BUILD_TESTING}")
+    include(CTest)
+
+    if(BUILD_TESTING)
         enable_testing()
         add_subdirectory(test)
-        message(STATUS "GTest found. Building unit tests.")
-    else()
-        message(STATUS "GTest not found. Unit tests will not be build.")
     endif()
+else()
+    message(STATUS "GTest not found. Unit tests cannot be build.")
+endif()
+
+find_package(Doxygen QUIET)
+
+if(DOXYGEN_FOUND)
+    set(DOC_TARGET_NAME ${PROJECT_NAME}_doc)
+
+    doxygen_add_docs(
+        ${DOC_TARGET_NAME}
+        src)
+
+    message(STATUS "To build the Doxygen documentation: cmake --build . --target ${DOC_TARGET_NAME}")
+else()
+    message(STATUS "Doxygen not found. Documentation cannot be build.")
 endif()
