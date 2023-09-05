@@ -47,64 +47,101 @@ constexpr Index_ dec_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
   }
 }
 
-template <typename T_>
-struct element_type_traits {
-  using size_type = std::size_t;
-  using difference_type = std::ptrdiff_t;
-  using element_type = T_;
-  using value_type = std::remove_cv_t<T_>;
-  using pointer = T_*;
-  using const_pointer = T_ const*;
-  using reference = T_&;
-  using const_reference = T_ const&;
-};
+template <typename Container_>
+class cyclic_deque_data {
+  using container = Container_;
 
-template <typename T_>
-struct cyclic_deque_impl {
-  using size_type = typename element_type_traits<T_>::size_type;
-  using difference_type = typename element_type_traits<T_>::difference_type;
-  using value_type = typename element_type_traits<T_>::value_type;
-  using pointer = typename element_type_traits<T_>::pointer;
-  using reference = typename element_type_traits<T_>::reference;
+ public:
+  using size_type = typename container::size_type;
+  using difference_type = typename container::difference_type;
+  using value_type = typename container::value_type;
+  using pointer = typename container::pointer;
+  using const_pointer = typename container::const_pointer;
+  using reference = typename container::reference;
+  using const_reference = typename container::const_reference;
 
-  constexpr cyclic_deque_impl() noexcept
-      : mem_start(), mem_finish(), deq_start(), deq_finish(), deq_size() {}
+  using iterator = typename container::iterator;
+  using const_iterator = typename container::const_iterator;
 
-  constexpr cyclic_deque_impl(pointer ms, pointer mf) noexcept
-      : mem_start(ms),
-        mem_finish(mf),
-        deq_start(mem_start),
-        deq_finish(mem_start),
+  constexpr cyclic_deque_data() noexcept
+      : buf(), deq_start(), deq_finish(), deq_size() {}
+
+  constexpr cyclic_deque_data(container b) noexcept
+      : buf(std::move(b)),
+        deq_start(buf.begin()),
+        deq_finish(buf.begin()),
         deq_size() {}
 
-  constexpr cyclic_deque_impl(pointer ms, pointer mf, size_type n) noexcept
-      : mem_start(ms),
-        mem_finish(mf),
-        deq_start(mem_start),
-        deq_finish(internal::wrap_cycle(deq_start + n, mem_start, mem_finish)),
+  constexpr cyclic_deque_data(container b, size_type n) noexcept
+      : buf(std::move(b)),
+        deq_start(buf.begin()),
+        deq_finish(wrap_cycle(deq_start + n)),
         deq_size(n) {
     assert(n <= capacity());
   }
 
-  constexpr pointer inc_cycle(pointer index) const noexcept {
-    return internal::inc_cycle(index, mem_start, mem_finish);
-  }
-
-  constexpr pointer dec_cycle(pointer index) const noexcept {
-    return internal::dec_cycle(index, mem_start, mem_finish);
-  }
-
-  //! \brief Wrap \p index from range [mem_start...mem_start+2n) to range
-  //! [mem_start...mem_start+n), where n equals mem_finish-mem_start.
-  constexpr pointer wrap_cycle(pointer index) const noexcept {
-    return internal::wrap_cycle(index, mem_start, mem_finish);
+  //! \brief Wrap \p index from range [buf.begin()...buf.begin()+2n) to range
+  //! [buf.begin()...buf.begin()+n), where n equals buf.end()-buf.begin().
+  constexpr iterator wrap_cycle(iterator index) const noexcept {
+    return internal::wrap_cycle(index, buf.begin(), buf.end());
   }
 
   //! \brief Convert an inner address [0...size) to an outer address that falls
   //! within the cyclic range [deq_start...deq_finish).
   template <typename Index_>
-  constexpr pointer inner_to_outer(Index_ i) const noexcept {
+  constexpr iterator inner_to_outer(Index_ i) const noexcept {
     return wrap_cycle(deq_start + i);
+  }
+
+  container buf;
+  iterator deq_start;
+  //! \brief One past-the-last element for the cycle. The value for deq_finish
+  //! is cyclic. Meaning that when the array range is either empty or full,
+  //! deq_start equals deq_finish. Or, when the cyclic_deque is not full, and
+  //! deq_start equals 0, then deq_finish equals size.
+  iterator deq_finish;
+  size_type deq_size;
+};
+
+template <typename Container_>
+struct cyclic_deque_impl : public cyclic_deque_data<Container_> {
+  using typename cyclic_deque_data<Container_>::size_type;
+  using typename cyclic_deque_data<Container_>::difference_type;
+  using typename cyclic_deque_data<Container_>::value_type;
+  using typename cyclic_deque_data<Container_>::reference;
+  using typename cyclic_deque_data<Container_>::iterator;
+
+  using cyclic_deque_data<Container_>::cyclic_deque_data;
+  using cyclic_deque_data<Container_>::wrap_cycle;
+  using cyclic_deque_data<Container_>::inner_to_outer;
+  using cyclic_deque_data<Container_>::buf;
+  using cyclic_deque_data<Container_>::deq_start;
+  using cyclic_deque_data<Container_>::deq_finish;
+  using cyclic_deque_data<Container_>::deq_size;
+
+  constexpr iterator inc_cycle(iterator index) const noexcept {
+    return internal::inc_cycle(index, buf.begin(), buf.end());
+  }
+
+  constexpr iterator dec_cycle(iterator index) const noexcept {
+    return internal::dec_cycle(index, buf.begin(), buf.end());
+  }
+
+  //! \brief Return a reference to the specified element at \p i, with bounds
+  //! checking.
+  constexpr reference at(size_type i) const {
+    if (i >= size()) {
+      throw std::out_of_range(
+          "cyclic_deque_impl::at: i (which is " + std::to_string(i) +
+          ") >= this->size() (which is " + std::to_string(size()) + ")");
+    }
+    return *inner_to_outer(i);
+  }
+
+  //! \brief Return a reference to an element using subscript access.
+  //! \details Undefined behavior if the index is out of bounds.
+  constexpr reference operator[](size_type i) const noexcept {
+    return *inner_to_outer(i);
   }
 
   constexpr reference front() const noexcept { return *deq_start; }
@@ -145,7 +182,7 @@ struct cyclic_deque_impl {
   template <typename U_>
   constexpr void push_front(U_&& value) {
     assert(!full());
-    pointer dec_deq_start = dec_cycle(deq_start);
+    iterator dec_deq_start = dec_cycle(deq_start);
     // Strong exception safety: The internal state is only updated after calling
     // set_value, just in case it throws.
     set_value(std::forward<U_>(value), *dec_deq_start);
@@ -162,18 +199,69 @@ struct cyclic_deque_impl {
     --deq_size;
   }
 
+  //! \brief Append a copy of the elements of range \p rg to the contents of the
+  //! cyclic_deque. Undefined behavior if available() is not sufficient to
+  //! accomodate the range.
+  template <typename Range_>
+  constexpr void append_range(Range_&& rg) {
+    // Use std::ranges::end(), etc., with C++20 or higher.
+    auto rg_size = std::distance(std::begin(rg), std::end(rg));
+    assert(static_cast<size_type>(rg_size) <= available());
+    // size1 can never be 0 because buf.end() is one past-the-last, always
+    // resulting in a split with work.
+    auto size1 = buf.end() - deq_finish;
+    if (rg_size <= size1) {
+      deq_finish = std::copy(rg.begin(), rg.end(), deq_finish);
+    } else {
+      auto split = std::next(rg.begin(), size1);
+      std::copy(rg.begin(), split, deq_finish);
+      deq_finish = std::copy(split, rg.end(), buf.begin());
+    }
+    deq_size += rg_size;
+  }
+
+  //! \brief Prepend a copy of the elements of range \p rg to the contents of
+  //! the cyclic_deque. Undefined behavior if available() is not sufficient to
+  //! accomodate the range.
+  template <typename Range_>
+  constexpr void prepend_range(Range_&& rg) {
+    auto rg_size = std::distance(std::begin(rg), std::end(rg));
+    assert(static_cast<size_type>(rg_size) <= available());
+    // The cyclic_deque is empty when deq_start and buf.begin() are equal (it
+    // can also be full, but that's treated as undefined behaviour). An empty
+    // size would cause the copy to be split into a full size and zero size
+    // copy. Because we don't want a 0 size copy, we move deq_start to buf.end()
+    // when deq_start equals buf.begin() with the operation below. It results in
+    // an unchanged address otherwise.
+    iterator dec_deq_start = dec_cycle(deq_start) + 1;
+    auto size2 = dec_deq_start - buf.begin();
+    if (rg_size <= size2) {
+      dec_deq_start -= rg_size;
+      std::copy(rg.begin(), rg.end(), dec_deq_start);
+    } else {
+      auto split = std::prev(rg.end(), size2);
+      std::copy(split, rg.end(), buf.begin());
+      dec_deq_start = buf.end() - rg_size + size2;
+      std::copy(rg.begin(), split, dec_deq_start);
+    }
+    deq_start = dec_deq_start;
+    deq_size += rg_size;
+  }
+
   constexpr size_type capacity() const noexcept {
-    return static_cast<size_type>(mem_finish - mem_start);
+    return static_cast<size_type>(buf.end() - buf.begin());
   }
 
   constexpr size_type size() const noexcept { return deq_size; }
+
+  constexpr size_type available() const noexcept { return capacity() - size(); }
 
   constexpr bool empty() const noexcept { return deq_size == 0; }
 
   constexpr bool full() const noexcept { return deq_size == capacity(); }
 
   constexpr void clear() noexcept {
-    deq_start = mem_start;
+    deq_start = buf.begin();
     deq_finish = deq_start;
     deq_size = 0;
   }
@@ -185,178 +273,233 @@ struct cyclic_deque_impl {
     deq_finish = wrap_cycle(deq_finish + d);
     deq_size = static_cast<size_type>(s + d);
   }
-
-  pointer mem_start;
-  pointer mem_finish;
-  pointer deq_start;
-  //! \brief One past-the-last element for the cycle. The value for deq_finish
-  //! is cyclic. Meaning that when the array range is either empty or full,
-  //! deq_start equals deq_finish. Or, when the cyclic_deque is not full, and
-  //! deq_start equals 0, then deq_finish equals size.
-  pointer deq_finish;
-  size_type deq_size;
 };
 
-template <typename T_>
+template <typename Data_, bool Const_>
+struct cyclic_deque_data_traits {
+  using pointer = typename Data_::pointer;
+  using reference = typename Data_::reference;
+};
+
+template <typename Data_>
+struct cyclic_deque_data_traits<Data_, true> {
+  using pointer = typename Data_::const_pointer;
+  using reference = typename Data_::const_reference;
+};
+
+template <typename Data_, bool Const_>
 class cyclic_deque_iterator {
-  using element_traits = element_type_traits<T_>;
-  using cyclic_data = cyclic_deque_impl<std::remove_const_t<T_>>;
+  using cyclic_data = Data_;
+  using cyclic_data_traits = cyclic_deque_data_traits<Data_, Const_>;
 
  public:
-  using size_type = typename element_traits::size_type;
-  using difference_type = typename element_traits::difference_type;
-  using value_type = typename element_traits::value_type;
-  using pointer = typename element_traits::pointer;
-  using reference = typename element_traits::reference;
+  using size_type = typename cyclic_data::size_type;
+  using difference_type = typename cyclic_data::difference_type;
+  using value_type = typename cyclic_data::value_type;
+  using pointer = typename cyclic_data_traits::pointer;
+  using reference = typename cyclic_data_traits::reference;
   using iterator_category = std::random_access_iterator_tag;
 
   constexpr cyclic_deque_iterator() noexcept = default;
 
   constexpr cyclic_deque_iterator(
-      cyclic_data const* data, difference_type index) noexcept
+      cyclic_data* data, difference_type index) noexcept
       : data_(data), index_(index) {}
 
-  reference operator*() const { return *data_->inner_to_outer(index_); }
-
-  pointer operator->() const { return data_->inner_to_outer(index_); }
-
-  friend bool operator==(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ == b.index_;
+  constexpr reference operator*() const noexcept {
+    return *data_->inner_to_outer(index_);
   }
 
-  friend bool operator!=(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ != b.index_;
-  }
-
-  friend bool operator>(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ > b.index_;
-  }
-
-  friend bool operator<(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ < b.index_;
-  }
-
-  friend bool operator>=(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ >= b.index_;
-  }
-
-  friend bool operator<=(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ <= b.index_;
+  constexpr pointer operator->() const noexcept {
+    return data_->inner_to_outer(index_);
   }
 
   //! \public Prefix increment.
-  cyclic_deque_iterator& operator++() {
+  constexpr cyclic_deque_iterator& operator++() noexcept {
     ++index_;
     return *this;
   }
 
   //! \private Postfix increment.
-  cyclic_deque_iterator operator++(int) {
+  constexpr cyclic_deque_iterator operator++(int) noexcept {
     return ++cyclic_deque_iterator(*this);
   }
 
   //! \private Prefix decrement.
-  cyclic_deque_iterator& operator--() {
+  constexpr cyclic_deque_iterator& operator--() noexcept {
     --index_;
     return *this;
   }
 
   //! \private Postfix decrement.
-  cyclic_deque_iterator operator--(int) {
+  constexpr cyclic_deque_iterator operator--(int) noexcept {
     return --cyclic_deque_iterator(*this);
   }
 
-  cyclic_deque_iterator& operator+=(difference_type n) {
+  constexpr cyclic_deque_iterator& operator+=(difference_type n) noexcept {
     index_ += n;
     return *this;
   }
 
-  cyclic_deque_iterator& operator-=(difference_type n) {
+  constexpr cyclic_deque_iterator& operator-=(difference_type n) noexcept {
     index_ -= n;
     return *this;
   }
 
-  friend cyclic_deque_iterator operator+(
-      cyclic_deque_iterator const& a, difference_type n) {
+  constexpr friend cyclic_deque_iterator operator+(
+      cyclic_deque_iterator const& a, difference_type n) noexcept {
     return cyclic_deque_iterator(a) += n;
   }
 
-  friend cyclic_deque_iterator operator+(
-      difference_type n, cyclic_deque_iterator const& a) {
+  constexpr friend cyclic_deque_iterator operator+(
+      difference_type n, cyclic_deque_iterator const& a) noexcept {
     return cyclic_deque_iterator(a) += n;
   }
 
-  friend cyclic_deque_iterator operator-(
-      cyclic_deque_iterator const& a, difference_type n) {
+  constexpr friend cyclic_deque_iterator operator-(
+      cyclic_deque_iterator const& a, difference_type n) noexcept {
     return cyclic_deque_iterator(a) -= n;
   }
 
-  friend cyclic_deque_iterator operator-(
-      difference_type n, cyclic_deque_iterator const& a) {
+  constexpr friend cyclic_deque_iterator operator-(
+      difference_type n, cyclic_deque_iterator const& a) noexcept {
     return cyclic_deque_iterator(a) -= n;
-  }
-
-  friend difference_type operator-(
-      cyclic_deque_iterator const& a, cyclic_deque_iterator const& b) {
-    assert(a.data_ == b.data_);
-    return a.index_ - b.index_;
   }
 
   //! \brief The input is expected to be within the range of (-2n...2*n), where
-  //! n equals mem_finish-mem_start. Undefined behavior otherwise.
-  reference operator[](difference_type i) const {
+  //! n equals buf.end()-buf.begin(). Undefined behavior otherwise.
+  constexpr reference operator[](difference_type i) const noexcept {
     return *data_->inner_to_outer(index_ + i);
   }
 
   //! \brief iterator to const_iterator conversion.
-  template <bool C_ = std::is_const_v<T_>, std::enable_if_t<!C_, int> = 0>
-  operator cyclic_deque_iterator<
-      std::conditional_t<!C_, std::add_const_t<T_>, std::remove_const_t<T_>>>()
-      const {
+  template <bool C_ = Const_, std::enable_if_t<!C_, int> = 0>
+  constexpr operator cyclic_deque_iterator<cyclic_data, !C_>() const noexcept {
     return {data_, index_};
   }
 
+  constexpr difference_type const& base() const noexcept { return index_; }
+
  private:
-  cyclic_data const* data_;
+  cyclic_data* data_;
   //! \brief The value for index_ is expected to fall within the range
   //! [0...size) at all times. Undefined behavior otherwise.
   difference_type index_;
+};
+
+// Forward iterator
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator==(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() == b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator!=(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() != b.base();
+}
+
+// Random access iterator
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr auto operator-(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() - b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator>(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() > b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator<(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() < b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator>=(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() >= b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+constexpr bool operator<=(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() <= b.base();
+}
+
+template <typename T_>
+struct element_type_traits {
+  using size_type = std::size_t;
+  using difference_type = std::ptrdiff_t;
+  using element_type = T_;
+  using value_type = std::remove_cv_t<T_>;
+  using pointer = T_*;
+  using const_pointer = T_ const*;
+  using reference = T_&;
+  using const_reference = T_ const&;
+};
+
+template <typename T_>
+class pointer_range {
+ public:
+  using size_type = typename element_type_traits<T_>::size_type;
+  using difference_type = typename element_type_traits<T_>::difference_type;
+  using value_type = typename element_type_traits<T_>::value_type;
+  using pointer = typename element_type_traits<T_>::pointer;
+  using const_pointer = typename element_type_traits<T_>::const_pointer;
+  using reference = typename element_type_traits<T_>::reference;
+  using const_reference = typename element_type_traits<T_>::const_reference;
+
+  using iterator = typename element_type_traits<T_>::pointer;
+  using const_iterator = typename element_type_traits<T_>::const_pointer;
+
+  constexpr pointer_range() noexcept = default;
+
+  constexpr pointer_range(iterator start, iterator finish) noexcept
+      : start_(start), finish_(finish){};
+
+  iterator begin() const noexcept { return start_; }
+  iterator end() const noexcept { return finish_; }
+
+ protected:
+  iterator start_;
+  iterator finish_;
 };
 
 }  // namespace internal
 
 template <typename T_>
 class cyclic_deque {
-  using cyclic_impl = internal::cyclic_deque_impl<T_>;
-  using element_traits = internal::element_type_traits<T_>;
-
   static_assert(
       std::is_same_v<std::remove_cv_t<T_>, T_>,
       "ouroboros::cyclic_deque must have a non-const, non-volatile value_type");
 
- public:
-  using size_type = typename element_traits::size_type;
-  using difference_type = typename element_traits::difference_type;
-  using value_type = typename element_traits::value_type;
-  using pointer = typename element_traits::pointer;
-  using const_pointer = typename element_traits::const_pointer;
-  using reference = typename element_traits::reference;
-  using const_reference = typename element_traits::const_reference;
+  using container = internal::pointer_range<T_>;
+  using cyclic_impl = internal::cyclic_deque_impl<container>;
 
-  using iterator = internal::cyclic_deque_iterator<value_type>;
-  using const_iterator = internal::cyclic_deque_iterator<value_type const>;
+ public:
+  using size_type = typename container::size_type;
+  using difference_type = typename container::difference_type;
+  using value_type = typename container::value_type;
+  using pointer = typename container::pointer;
+  using const_pointer = typename container::const_pointer;
+  using reference = typename container::reference;
+  using const_reference = typename container::const_reference;
+
+  using iterator = internal::cyclic_deque_iterator<cyclic_impl const, false>;
+  using const_iterator =
+      internal::cyclic_deque_iterator<cyclic_impl const, true>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -364,46 +507,40 @@ class cyclic_deque {
 
   template <typename ContiguousIterator_>
   constexpr cyclic_deque(
-      ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish)
-      : impl_(&(*mem_start), &(*mem_finish)) {}
+      ContiguousIterator_ buf_start, ContiguousIterator_ buf_finish)
+      : impl_(container(&(*buf_start), &(*buf_finish))) {}
 
   template <typename ContiguousIterator_>
   constexpr cyclic_deque(
-      ContiguousIterator_ mem_start,
-      ContiguousIterator_ mem_finish,
+      ContiguousIterator_ buf_start,
+      ContiguousIterator_ buf_finish,
       size_type n)
-      : impl_(&(*mem_start), &(*mem_finish), n) {}
+      : impl_(container(&(*buf_start), &(*buf_finish)), n) {}
 
   template <size_type N_>
-  constexpr cyclic_deque(T_ (&mem)[N_]) noexcept : impl_(mem, mem + N_) {}
+  constexpr cyclic_deque(T_ (&buf)[N_]) noexcept
+      : impl_(container(buf, buf + N_)) {}
 
   template <size_type N_>
-  constexpr cyclic_deque(T_ (&mem)[N_], size_type n) noexcept
-      : impl_(mem, mem + N_, n) {}
+  constexpr cyclic_deque(T_ (&buf)[N_], size_type n) noexcept
+      : impl_(container(buf, buf + N_), n) {}
 
   template <size_type N_>
-  constexpr cyclic_deque(std::array<T_, N_>& mem) noexcept
-      : impl_(mem.data(), mem.data() + mem.size()) {}
+  constexpr cyclic_deque(std::array<T_, N_>& buf) noexcept
+      : impl_(container(buf.data(), buf.data() + buf.size())) {}
 
   template <size_type N_>
-  constexpr cyclic_deque(std::array<T_, N_>& mem, size_type n) noexcept
-      : impl_(mem.data(), mem.data() + mem.size(), n) {}
+  constexpr cyclic_deque(std::array<T_, N_>& buf, size_type n) noexcept
+      : impl_(container(buf.data(), buf.data() + buf.size()), n) {}
 
   //! \brief Return a reference to the specified element at \p i, with bounds
   //! checking.
-  constexpr reference at(size_type i) const {
-    if (i >= size()) {
-      throw std::out_of_range(
-          "cyclic_deque::at: i (which is " + std::to_string(i) +
-          ") >= this->size() (which is " + std::to_string(size()) + ")");
-    }
-    return *impl_.inner_to_outer(i);
-  }
+  constexpr reference at(size_type i) const { return impl_.at(i); }
 
   //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
   constexpr reference operator[](size_type i) const noexcept {
-    return *impl_.inner_to_outer(i);
+    return impl_[i];
   }
 
   //! \brief Return a reference to the first element of the cyclic_deque.
@@ -449,20 +586,7 @@ class cyclic_deque {
   //! accomodate the range.
   template <typename Range_>
   constexpr void append_range(Range_&& rg) {
-    // Use std::ranges::end(), etc., with C++20 or higher.
-    auto rg_size = std::distance(std::begin(rg), std::end(rg));
-    assert(static_cast<size_type>(rg_size) <= available());
-    // size1 can never be 0 because mem_finish is one past-the-last, always
-    // resulting in a split with work.
-    auto size1 = impl_.mem_finish - impl_.deq_finish;
-    if (rg_size <= size1) {
-      impl_.deq_finish = std::copy(rg.begin(), rg.end(), impl_.deq_finish);
-    } else {
-      auto split = std::next(rg.begin(), size1);
-      std::copy(rg.begin(), split, impl_.deq_finish);
-      impl_.deq_finish = std::copy(split, rg.end(), impl_.mem_start);
-    }
-    impl_.deq_size += rg_size;
+    impl_.append_range(std::forward<Range_>(rg));
   }
 
   //! \brief Prepend a copy of the elements of range \p rg to the contents of
@@ -470,27 +594,7 @@ class cyclic_deque {
   //! accomodate the range.
   template <typename Range_>
   constexpr void prepend_range(Range_&& rg) {
-    auto rg_size = std::distance(std::begin(rg), std::end(rg));
-    assert(static_cast<size_type>(rg_size) <= available());
-    // The cyclic_deque is empty when deq_start and mem_start are equal (it can
-    // also be full, but that's treated as undefined behaviour). An empty size
-    // would cause the copy to be split into a full size and zero size copy.
-    // Because we don't want a 0 size copy, we move deq_start to mem_finish when
-    // deq_start equals mem_start with the operation below. It results in an
-    // unchanged address otherwise.
-    pointer dec_deq_start = impl_.dec_cycle(impl_.deq_start) + 1;
-    auto size2 = dec_deq_start - impl_.mem_start;
-    if (rg_size <= size2) {
-      dec_deq_start -= rg_size;
-      std::copy(rg.begin(), rg.end(), dec_deq_start);
-    } else {
-      auto split = std::prev(rg.end(), size2);
-      std::copy(split, rg.end(), impl_.mem_start);
-      dec_deq_start = impl_.mem_finish - rg_size + size2;
-      std::copy(rg.begin(), split, dec_deq_start);
-    }
-    impl_.deq_start = dec_deq_start;
-    impl_.deq_size += rg_size;
+    impl_.prepend_range(std::forward<Range_>(rg));
   }
 
   //! \brief Erase all elements.
@@ -507,7 +611,7 @@ class cyclic_deque {
 
   //! \brief Return the number of elements that can be inserted before the
   //! cyclic_deque is full. I.e., the unoccupied capacity, capapcity() - size().
-  constexpr size_type available() const noexcept { return capacity() - size(); }
+  constexpr size_type available() const noexcept { return impl_.available(); }
 
   constexpr bool empty() const noexcept { return impl_.empty(); }
 
@@ -550,27 +654,27 @@ class cyclic_deque {
 };
 
 template <typename ContiguousIterator_>
-cyclic_deque(ContiguousIterator_ mem_start, ContiguousIterator_ mem_finish)
+cyclic_deque(ContiguousIterator_, ContiguousIterator_)
     -> cyclic_deque<internal::value_type_t<ContiguousIterator_>>;
 
 template <typename ContiguousIterator_>
 cyclic_deque(
-    ContiguousIterator_ mem_start,
-    ContiguousIterator_ mem_finish,
+    ContiguousIterator_,
+    ContiguousIterator_,
     typename internal::element_type_traits<
-        internal::value_type_t<ContiguousIterator_>>::size_type n)
+        internal::value_type_t<ContiguousIterator_>>::size_type)
     -> cyclic_deque<internal::value_type_t<ContiguousIterator_>>;
 
 template <typename T_, std::size_t N_>
-cyclic_deque(T_ (&mem)[N_]) -> cyclic_deque<T_>;
+cyclic_deque(T_ (&)[N_]) -> cyclic_deque<T_>;
 
 template <typename T_, std::size_t N_>
-cyclic_deque(T_ (&mem)[N_], std::size_t n) -> cyclic_deque<T_>;
+cyclic_deque(T_ (&)[N_], std::size_t) -> cyclic_deque<T_>;
 
 template <typename T_, std::size_t N_>
-cyclic_deque(std::array<T_, N_>& mem) -> cyclic_deque<T_>;
+cyclic_deque(std::array<T_, N_>&) -> cyclic_deque<T_>;
 
 template <typename T_, std::size_t N_>
-cyclic_deque(std::array<T_, N_>& mem, std::size_t n) -> cyclic_deque<T_>;
+cyclic_deque(std::array<T_, N_>&, std::size_t) -> cyclic_deque<T_>;
 
 }  // namespace ouroboros
