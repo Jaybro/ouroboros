@@ -91,8 +91,14 @@ TEST(CyclicDequeTest, Resize) {
 }
 
 TEST(CyclicDequeTest, At) {
-  ouroboros::cyclic_deque<std::size_t> cdeque;
+  ouroboros::cyclic_deque<std::size_t> cdeque(1, 1);
+  EXPECT_EQ(cdeque.at(0), cdeque[0]);
   EXPECT_THROW(cdeque.at(1), std::out_of_range);
+}
+
+TEST(CyclicDequeTest, MaxSize) {
+  ouroboros::cyclic_deque<std::size_t> cdeque(42);
+  EXPECT_EQ(cdeque.max_size(), cdeque.capacity());
 }
 
 TEST(CyclicDequeTest, LiFoBack) {

@@ -640,6 +640,7 @@ class cyclic_deque {
   constexpr void clear() noexcept { impl_.clear(); }
 
   //! \brief Change the number of stored elements.
+  //! \details Undefined behavior if the new size exceeds capacity().
   constexpr void resize(size_type n) noexcept { impl_.resize(n); }
 
   //! \brief Return the maximum number of elements the cyclic_deque can hold.
@@ -647,6 +648,12 @@ class cyclic_deque {
 
   //! \brief Return the number of elements in the cyclic_deque.
   constexpr size_type size() const noexcept { return impl_.size(); }
+
+  //! \brief Return the maximum number of elements the cyclic_deque is able to
+  //! hold due to system or library implementation limitations.
+  //! \details Because the cyclic_deque is a fixed-size container, the returned
+  //! value equals that of the value returned by capacity().
+  constexpr size_type max_size() const noexcept { return impl_.capacity(); }
 
   //! \brief Return the number of elements that can be inserted before the
   //! cyclic_deque is full. I.e., the unoccupied capacity, capapcity() - size().
