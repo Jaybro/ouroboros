@@ -13,9 +13,6 @@ namespace ouroboros {
 
 namespace internal {
 
-template <typename Iterator_>
-using value_type_t = typename std::iterator_traits<Iterator_>::value_type;
-
 //! \brief Wrap \p index from the expected input range of
 //! [start...finish+(finish-start)) between [start...finish).
 template <typename Index_>
@@ -59,6 +56,12 @@ struct range_traits {
   using maybe_const_iterator = decltype(std::declval<range>().begin());
 };
 
+// Allows delaying the calculation of the container size for the caller of the
+// constructor. This is useful in cases where the size is not available or
+// expensive to calculate. The size may not be available when the container (the
+// first argument) is constructed or moved during the constructor call. The size
+// may be expensive to calculate when the container is being constructed from
+// iterators, such as the one from an std::list.
 struct size_from_container_tag {};
 
 template <typename Container_>
@@ -242,9 +245,6 @@ class cyclic_deque_impl {
     --deq_size;
   }
 
-  //! \brief Append a copy of the elements of range \p rg to the contents of the
-  //! cyclic_deque. Undefined behavior if available() is not sufficient to
-  //! accomodate the range.
   template <typename Range_>
   constexpr void append_range(Range_&& rg) {
     // Use std::ranges::end(), etc., with C++20 or higher.
@@ -263,9 +263,6 @@ class cyclic_deque_impl {
     deq_size += rg_size;
   }
 
-  //! \brief Prepend a copy of the elements of range \p rg to the contents of
-  //! the cyclic_deque. Undefined behavior if available() is not sufficient to
-  //! accomodate the range.
   template <typename Range_>
   constexpr void prepend_range(Range_&& rg) {
     auto rg_size = std::distance(std::begin(rg), std::end(rg));
@@ -381,7 +378,7 @@ class cyclic_deque_iterator {
     return data_->inner_to_outer(index_);
   }
 
-  //! \public Prefix increment.
+  //! \private Prefix increment.
   constexpr cyclic_deque_iterator& operator++() noexcept {
     ++index_;
     return *this;
@@ -456,6 +453,7 @@ class cyclic_deque_iterator {
 };
 
 // Forward iterator
+
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 constexpr bool operator==(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
@@ -471,6 +469,7 @@ constexpr bool operator!=(
 }
 
 // Random access iterator
+
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 constexpr auto operator-(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
@@ -518,6 +517,7 @@ class cyclic_deque {
   using cyclic_impl = internal::cyclic_deque_impl<container>;
 
  public:
+  using allocator_type = typename container::allocator_type;
   using size_type = typename container::size_type;
   using difference_type = typename container::difference_type;
   using value_type = typename container::value_type;
@@ -532,38 +532,44 @@ class cyclic_deque {
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  constexpr cyclic_deque() noexcept(noexcept(Allocator_())) = default;
+  constexpr cyclic_deque() noexcept(noexcept(allocator_type())) = default;
 
-  constexpr explicit cyclic_deque(Allocator_ const& a) noexcept
+  constexpr explicit cyclic_deque(allocator_type const& a) noexcept
       : impl_(container(a)) {}
 
   constexpr explicit cyclic_deque(
-      size_type c, Allocator_ const& a = Allocator_())
+      size_type c, allocator_type const& a = allocator_type())
       : impl_(container(c, a)) {}
 
   constexpr cyclic_deque(
-      size_type c, size_type s, Allocator_ const& a = Allocator_())
+      size_type c, size_type s, allocator_type const& a = allocator_type())
       : impl_(container(c, a), s) {}
 
   template <class InputIterator_>
   constexpr cyclic_deque(
-      InputIterator_ f, InputIterator_ l, const Allocator_& a = Allocator_())
+      InputIterator_ f,
+      InputIterator_ l,
+      allocator_type const& a = allocator_type())
       : impl_(container(f, l, a), internal::size_from_container_tag()) {}
 
   constexpr cyclic_deque(
-      std::initializer_list<T_> i, const Allocator_& a = Allocator_())
+      std::initializer_list<T_> i, allocator_type const& a = allocator_type())
       : impl_(container(i, a), internal::size_from_container_tag()) {}
 
   //! \brief Return a reference to the specified element at \p i, with bounds
   //! checking.
   constexpr reference at(size_type i) { return impl_.at(i); }
 
+  //! \brief Return a const reference to the specified element at \p i, with
+  //! bounds checking.
   constexpr const_reference at(size_type i) const { return impl_.at(i); }
 
   //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
   constexpr reference operator[](size_type i) noexcept { return impl_[i]; }
 
+  //! \brief Return a const reference to an element using subscript access.
+  //! \details Undefined behavior if the index is out of bounds.
   constexpr const_reference operator[](size_type i) const noexcept {
     return impl_[i];
   }
@@ -572,12 +578,16 @@ class cyclic_deque {
   //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr reference front() noexcept { return impl_.front(); }
 
+  //! \brief Return a const reference to the first element of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr const_reference front() const noexcept { return impl_.front(); }
 
   //! \brief Return a reference to the last element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr reference back() noexcept { return impl_.back(); }
 
+  //! \brief Return a const reference to the last element of the cyclic_deque.
+  //! \details Undefined behavior if the cyclic_deque is empty.
   constexpr const_reference back() const noexcept { return impl_.back(); }
 
   //! \brief Add an element to the end of the cyclic_deque.
@@ -642,8 +652,10 @@ class cyclic_deque {
   //! cyclic_deque is full. I.e., the unoccupied capacity, capapcity() - size().
   constexpr size_type available() const noexcept { return impl_.available(); }
 
+  //! \brief Return true if the cyclic_deque is empty.
   constexpr bool empty() const noexcept { return impl_.empty(); }
 
+  //! \brief Return true if the cyclic_deque is full.
   constexpr bool full() const noexcept { return impl_.full(); }
 
   constexpr iterator begin() noexcept {

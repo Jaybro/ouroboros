@@ -44,6 +44,17 @@ TEST(CyclicDequeTest, ConstructorCapacitySize) {
   ExpectCapacityAndSize(cdeque, capacity, size);
 }
 
+TEST(CyclicDequeTest, ConstructorIterators) {
+  std::vector<std::size_t> v(10, 42);
+  ouroboros::cyclic_deque cdeque(v.begin(), v.end());
+  ExpectCapacityAndSize(cdeque, v.size(), v.size());
+}
+
+TEST(CyclicDequeTest, ConstructorInitializerList) {
+  ouroboros::cyclic_deque cdeque({42.0f, 42.0f, 42.0f, 42.0f});
+  ExpectCapacityAndSize(cdeque, 4, 4);
+}
+
 TEST(CyclicDequeTest, FullEmptyClear) {
   std::size_t capacity = 8;
   ouroboros::cyclic_deque<std::size_t> cdeque(capacity, capacity);
