@@ -5,7 +5,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils.cmake)
 project(ouroboros
     LANGUAGES CXX
     VERSION 0.1.0
-    DESCRIPTION "Ouroboros is a C++ header only library containing a cyclic deque, aka a circular buffer, that provides a cyclic view of a contiguous sequence."
+    DESCRIPTION "Ouroboros is a C++ header only library containing a cyclic deque, aka a circular buffer, that supports fast insertion and deletion at both its beginning and end."
     HOMEPAGE_URL "https://github.com/Jaybro/ouroboros")
 
 if(NOT CMAKE_BUILD_TYPE)
