@@ -93,7 +93,8 @@ TEST(CyclicDequeTest, Resize) {
 TEST(CyclicDequeTest, At) {
   ouroboros::cyclic_deque<std::size_t> cdeque(1, 1);
   EXPECT_EQ(cdeque.at(0), cdeque[0]);
-  EXPECT_THROW(cdeque.at(1), std::out_of_range);
+  EXPECT_THROW(
+      [[maybe_unused]] std::size_t v = cdeque.at(1), std::out_of_range);
 }
 
 TEST(CyclicDequeTest, MaxSize) {
@@ -320,13 +321,13 @@ TEST(CyclicDequeTest, PrependRange) {
 
 // This class may lead to "unreachable code" warnings. Likely because the lines
 // of code that follow after a throw will never be reached.
-struct Evil {
-  Evil() = default;  // presage
-  Evil(Evil const&) { throw std::runtime_error("malice"); }
-  Evil(Evil&&) { throw std::runtime_error("malice"); }
-  Evil& operator=(Evil const&) { throw std::runtime_error("malice"); }
-  Evil& operator=(Evil&&) { throw std::runtime_error("malice"); }
-  ~Evil() = default;  // serenity
+struct evil {
+  evil() = default;  // presage
+  evil(evil const&) { throw std::runtime_error("malice"); }
+  evil(evil&&) { throw std::runtime_error("malice"); }
+  evil& operator=(evil const&) { throw std::runtime_error("malice"); }
+  evil& operator=(evil&&) { throw std::runtime_error("malice"); }
+  ~evil() = default;  // serenity
 
   std::byte noise;
 };
@@ -336,14 +337,14 @@ struct Evil {
 // when the copy itself is not strongly exception safe, overwriting, perhaps
 // partially, an object.
 TEST(CyclicDequeTest, StrongExceptionSafety) {
-  std::vector<Evil> r(2);
+  std::vector<evil> r(2);
 
   std::size_t initial_size = 2;
-  ouroboros::cyclic_deque<Evil> cdeque(4, initial_size);
+  ouroboros::cyclic_deque<evil> cdeque(4, initial_size);
   auto ptr_0 = &cdeque[0];
   auto ptr_N = &cdeque[initial_size - 1];
 
-  Evil singleton, tabs;
+  evil singleton, tabs;
   EXPECT_THROW(cdeque.push_back(singleton), std::runtime_error);
   EXPECT_THROW(cdeque.push_back(std::move(singleton)), std::runtime_error);
   EXPECT_THROW(cdeque.push_front(tabs), std::runtime_error);
@@ -353,4 +354,37 @@ TEST(CyclicDequeTest, StrongExceptionSafety) {
   EXPECT_EQ(cdeque.size(), initial_size);
   EXPECT_EQ(&cdeque[0], ptr_0);
   EXPECT_EQ(&cdeque[initial_size - 1], ptr_N);
+}
+
+TEST(CyclicDequeTest, Equality) {
+  std::vector<int> v = {42, 42, 42, 41};
+  ouroboros::cyclic_deque cdeque_a(v.begin(), v.end());
+  ouroboros::cyclic_deque cdeque_b = {42, 42, 42, 42};
+  cdeque_b.pop_front();
+  cdeque_b.push_back(41);
+  EXPECT_TRUE(cdeque_a == cdeque_b);
+
+  ouroboros::cyclic_deque cdeque_c({42, 42, 42, 21});
+  ouroboros::cyclic_deque cdeque_d({42, 42, 42});
+  EXPECT_TRUE(cdeque_a != cdeque_c);
+  EXPECT_TRUE(cdeque_a != cdeque_d);
+}
+
+TEST(CyclicDequeTest, Ordering) {
+  std::vector<int> v = {42, 42, 42, 10};
+  ouroboros::cyclic_deque cdeque_a(v.begin(), v.end());
+  ouroboros::cyclic_deque cdeque_b = {42, 42, 42, 42};
+  cdeque_b.pop_front();
+  cdeque_b.push_back(41);
+  EXPECT_TRUE(cdeque_a < cdeque_b);
+  EXPECT_TRUE(cdeque_b > cdeque_a);
+
+  ouroboros::cyclic_deque cdeque_c({42, 42, 42, 41});
+  ouroboros::cyclic_deque cdeque_d({42, 42, 42});
+  EXPECT_TRUE(cdeque_d < cdeque_c);
+  EXPECT_TRUE(cdeque_d <= cdeque_c);
+  EXPECT_TRUE(cdeque_c >= cdeque_d);
+  EXPECT_TRUE(cdeque_c > cdeque_d);
+  EXPECT_TRUE(cdeque_b <= cdeque_c);
+  EXPECT_TRUE(cdeque_b >= cdeque_c);
 }

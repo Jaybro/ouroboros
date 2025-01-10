@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <initializer_list>
 #include <iterator>
@@ -16,7 +17,7 @@ namespace internal {
 //! \brief Wrap \p index from the expected input range of
 //! [start...finish+(finish-start)) between [start...finish).
 template <typename Index_>
-constexpr Index_ wrap_cycle(
+[[nodiscard]] constexpr Index_ wrap_cycle(
     Index_ index, Index_ start, Index_ finish) noexcept {
   if (index >= finish) {
     return index - finish + start;
@@ -27,7 +28,8 @@ constexpr Index_ wrap_cycle(
 
 //! \brief Increment \p index within the cyclic range [start...finish).
 template <typename Index_>
-constexpr Index_ inc_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
+[[nodiscard]] constexpr Index_ inc_cycle(
+    Index_ index, Index_ start, Index_ finish) noexcept {
   ++index;
   if (index == finish) {
     return start;
@@ -38,7 +40,8 @@ constexpr Index_ inc_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
 
 //! \brief Decrement \p index within the cyclic range [start...finish).
 template <typename Index_>
-constexpr Index_ dec_cycle(Index_ index, Index_ start, Index_ finish) noexcept {
+[[nodiscard]] constexpr Index_ dec_cycle(
+    Index_ index, Index_ start, Index_ finish) noexcept {
   if (index == start) {
     return finish - 1;
   } else {
@@ -97,6 +100,7 @@ class cyclic_deque_impl {
   constexpr cyclic_deque_impl(container b, size_type n) noexcept
       : buf(std::move(b)),
         deq_start(buf.begin()),
+        // We use wrap_cycle for the case that n equals capacity().
         deq_finish(wrap_cycle(deq_start + n)),
         deq_size(n) {
     assert(n <= capacity());
@@ -110,12 +114,12 @@ class cyclic_deque_impl {
 
   //! \brief Wrap \p index from range [buf.begin()...buf.begin()+2n) to range
   //! [buf.begin()...buf.begin()+n), where n equals buf.end()-buf.begin().
-  constexpr iterator wrap_cycle(iterator index) noexcept {
+  [[nodiscard]] constexpr iterator wrap_cycle(iterator index) noexcept {
     return internal::wrap_cycle(index, buf.begin(), buf.end());
   }
 
   //! \copydoc wrap_cycle(iterator)
-  constexpr maybe_const_iterator wrap_cycle(
+  [[nodiscard]] constexpr maybe_const_iterator wrap_cycle(
       maybe_const_iterator index) const noexcept {
     return internal::wrap_cycle(index, buf.begin(), buf.end());
   }
@@ -123,30 +127,31 @@ class cyclic_deque_impl {
   //! \brief Convert an inner address [0...size) to an outer address that falls
   //! within the cyclic range [deq_start...deq_finish).
   template <typename Index_>
-  constexpr iterator inner_to_outer(Index_ i) noexcept {
+  [[nodiscard]] constexpr iterator inner_to_outer(Index_ i) noexcept {
     return wrap_cycle(deq_start + i);
   }
 
   //! \copydoc inner_to_outer(Index_)
   template <typename Index_>
-  constexpr maybe_const_iterator inner_to_outer(Index_ i) const noexcept {
+  [[nodiscard]] constexpr maybe_const_iterator inner_to_outer(
+      Index_ i) const noexcept {
     return wrap_cycle(deq_start + i);
   }
 
-  constexpr iterator inc_cycle(iterator index) noexcept {
+  [[nodiscard]] constexpr iterator inc_cycle(iterator index) noexcept {
     return internal::inc_cycle(index, buf.begin(), buf.end());
   }
 
-  constexpr maybe_const_iterator inc_cycle(
+  [[nodiscard]] constexpr maybe_const_iterator inc_cycle(
       maybe_const_iterator index) const noexcept {
     return internal::inc_cycle(index, buf.begin(), buf.end());
   }
 
-  constexpr iterator dec_cycle(iterator index) noexcept {
+  [[nodiscard]] constexpr iterator dec_cycle(iterator index) noexcept {
     return internal::dec_cycle(index, buf.begin(), buf.end());
   }
 
-  constexpr maybe_const_iterator dec_cycle(
+  [[nodiscard]] constexpr maybe_const_iterator dec_cycle(
       maybe_const_iterator index) const noexcept {
     return internal::dec_cycle(index, buf.begin(), buf.end());
   }
@@ -163,35 +168,40 @@ class cyclic_deque_impl {
  public:
   //! \brief Return a reference to the specified element at \p i, with bounds
   //! checking.
-  constexpr reference at(size_type i) {
+  [[nodiscard]] constexpr reference at(size_type i) {
     throw_if_out_of_range(i);
     return *inner_to_outer(i);
   }
 
   //! \copydoc at(size_type)
-  constexpr maybe_const_reference at(size_type i) const {
+  [[nodiscard]] constexpr maybe_const_reference at(size_type i) const {
     throw_if_out_of_range(i);
     return *inner_to_outer(i);
   }
 
   //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
-  constexpr reference operator[](size_type i) noexcept {
+  [[nodiscard]] constexpr reference operator[](size_type i) noexcept {
     return *inner_to_outer(i);
   }
 
   //! \copydoc operator[](size_type)
-  constexpr maybe_const_reference operator[](size_type i) const noexcept {
+  [[nodiscard]] constexpr maybe_const_reference operator[](
+      size_type i) const noexcept {
     return *inner_to_outer(i);
   }
 
-  constexpr reference front() noexcept { return *deq_start; }
+  [[nodiscard]] constexpr reference front() noexcept { return *deq_start; }
 
-  constexpr maybe_const_reference front() const noexcept { return *deq_start; }
+  [[nodiscard]] constexpr maybe_const_reference front() const noexcept {
+    return *deq_start;
+  }
 
-  constexpr reference back() noexcept { return *dec_cycle(deq_finish); }
+  [[nodiscard]] constexpr reference back() noexcept {
+    return *dec_cycle(deq_finish);
+  }
 
-  constexpr maybe_const_reference back() const noexcept {
+  [[nodiscard]] constexpr maybe_const_reference back() const noexcept {
     return *dec_cycle(deq_finish);
   }
 
@@ -288,17 +298,21 @@ class cyclic_deque_impl {
     deq_size += rg_size;
   }
 
-  constexpr size_type capacity() const noexcept {
+  [[nodiscard]] constexpr size_type capacity() const noexcept {
     return static_cast<size_type>(buf.end() - buf.begin());
   }
 
-  constexpr size_type size() const noexcept { return deq_size; }
+  [[nodiscard]] constexpr size_type size() const noexcept { return deq_size; }
 
-  constexpr size_type available() const noexcept { return capacity() - size(); }
+  [[nodiscard]] constexpr size_type available() const noexcept {
+    return capacity() - size();
+  }
 
-  constexpr bool empty() const noexcept { return deq_size == 0; }
+  [[nodiscard]] constexpr bool empty() const noexcept { return deq_size == 0; }
 
-  constexpr bool full() const noexcept { return deq_size == capacity(); }
+  [[nodiscard]] constexpr bool full() const noexcept {
+    return deq_size == capacity();
+  }
 
   constexpr void clear() noexcept {
     deq_start = buf.begin();
@@ -370,11 +384,11 @@ class cyclic_deque_iterator {
       cyclic_data* data, difference_type index) noexcept
       : data_(data), index_(index) {}
 
-  constexpr reference operator*() const noexcept {
+  [[nodiscard]] constexpr reference operator*() const noexcept {
     return *data_->inner_to_outer(index_);
   }
 
-  constexpr pointer operator->() const noexcept {
+  [[nodiscard]] constexpr pointer operator->() const noexcept {
     return data_->inner_to_outer(index_);
   }
 
@@ -385,7 +399,7 @@ class cyclic_deque_iterator {
   }
 
   //! \private Postfix increment.
-  constexpr cyclic_deque_iterator operator++(int) noexcept {
+  [[nodiscard]] constexpr cyclic_deque_iterator operator++(int) noexcept {
     return ++cyclic_deque_iterator(*this);
   }
 
@@ -396,7 +410,7 @@ class cyclic_deque_iterator {
   }
 
   //! \private Postfix decrement.
-  constexpr cyclic_deque_iterator operator--(int) noexcept {
+  [[nodiscard]] constexpr cyclic_deque_iterator operator--(int) noexcept {
     return --cyclic_deque_iterator(*this);
   }
 
@@ -410,59 +424,64 @@ class cyclic_deque_iterator {
     return *this;
   }
 
-  constexpr friend cyclic_deque_iterator operator+(
+  [[nodiscard]] constexpr friend cyclic_deque_iterator operator+(
       cyclic_deque_iterator const& a, difference_type n) noexcept {
     return cyclic_deque_iterator(a) += n;
   }
 
-  constexpr friend cyclic_deque_iterator operator+(
+  [[nodiscard]] constexpr friend cyclic_deque_iterator operator+(
       difference_type n, cyclic_deque_iterator const& a) noexcept {
     return cyclic_deque_iterator(a) += n;
   }
 
-  constexpr friend cyclic_deque_iterator operator-(
+  [[nodiscard]] constexpr friend cyclic_deque_iterator operator-(
       cyclic_deque_iterator const& a, difference_type n) noexcept {
     return cyclic_deque_iterator(a) -= n;
   }
 
-  constexpr friend cyclic_deque_iterator operator-(
+  [[nodiscard]] constexpr friend cyclic_deque_iterator operator-(
       difference_type n, cyclic_deque_iterator const& a) noexcept {
     return cyclic_deque_iterator(a) -= n;
   }
 
   //! \brief The input is expected to be within the range of (-2n...2*n), where
   //! n equals buf.end()-buf.begin(). Undefined behavior otherwise.
-  constexpr reference operator[](difference_type i) const noexcept {
+  [[nodiscard]] constexpr reference operator[](
+      difference_type i) const noexcept {
     return *data_->inner_to_outer(index_ + i);
   }
 
   //! \brief iterator to const_iterator conversion.
   template <bool C_ = Const_, std::enable_if_t<!C_, int> = 0>
-  constexpr operator cyclic_deque_iterator<cyclic_data const, !C_>()
-      const noexcept {
+  [[nodiscard]] constexpr
+  operator cyclic_deque_iterator<cyclic_data const, !C_>() const noexcept {
     return {data_, index_};
   }
 
-  constexpr difference_type const& base() const noexcept { return index_; }
+  [[nodiscard]] constexpr difference_type const& base() const noexcept {
+    return index_;
+  }
 
  private:
   cyclic_data* data_;
   //! \brief The value for index_ is expected to fall within the range
-  //! [0...size) at all times. Undefined behavior otherwise.
+  //! [0...size] at all times, with an index_ of size representing the end
+  //! iterator. Undefined behavior otherwise. The end iterator is a placeholder
+  //! and accessing its corresponging element results in undefined behavior.
   difference_type index_;
 };
 
 // Forward iterator
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator==(
+[[nodiscard]] constexpr bool operator==(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() == b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator!=(
+[[nodiscard]] constexpr bool operator!=(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() != b.base();
@@ -471,35 +490,35 @@ constexpr bool operator!=(
 // Random access iterator
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr auto operator-(
+[[nodiscard]] constexpr auto operator-(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() - b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator>(
+[[nodiscard]] constexpr bool operator>(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() > b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator<(
+[[nodiscard]] constexpr bool operator<(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() < b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator>=(
+[[nodiscard]] constexpr bool operator>=(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() >= b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-constexpr bool operator<=(
+[[nodiscard]] constexpr bool operator<=(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() <= b.base();
@@ -558,37 +577,46 @@ class cyclic_deque {
 
   //! \brief Return a reference to the specified element at \p i, with bounds
   //! checking.
-  constexpr reference at(size_type i) { return impl_.at(i); }
+  [[nodiscard]] constexpr reference at(size_type i) { return impl_.at(i); }
 
   //! \brief Return a const reference to the specified element at \p i, with
   //! bounds checking.
-  constexpr const_reference at(size_type i) const { return impl_.at(i); }
+  [[nodiscard]] constexpr const_reference at(size_type i) const {
+    return impl_.at(i);
+  }
 
   //! \brief Return a reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
-  constexpr reference operator[](size_type i) noexcept { return impl_[i]; }
+  [[nodiscard]] constexpr reference operator[](size_type i) noexcept {
+    return impl_[i];
+  }
 
   //! \brief Return a const reference to an element using subscript access.
   //! \details Undefined behavior if the index is out of bounds.
-  constexpr const_reference operator[](size_type i) const noexcept {
+  [[nodiscard]] constexpr const_reference operator[](
+      size_type i) const noexcept {
     return impl_[i];
   }
 
   //! \brief Return a reference to the first element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr reference front() noexcept { return impl_.front(); }
+  [[nodiscard]] constexpr reference front() noexcept { return impl_.front(); }
 
   //! \brief Return a const reference to the first element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr const_reference front() const noexcept { return impl_.front(); }
+  [[nodiscard]] constexpr const_reference front() const noexcept {
+    return impl_.front();
+  }
 
   //! \brief Return a reference to the last element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr reference back() noexcept { return impl_.back(); }
+  [[nodiscard]] constexpr reference back() noexcept { return impl_.back(); }
 
   //! \brief Return a const reference to the last element of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is empty.
-  constexpr const_reference back() const noexcept { return impl_.back(); }
+  [[nodiscard]] constexpr const_reference back() const noexcept {
+    return impl_.back();
+  }
 
   //! \brief Add an element to the end of the cyclic_deque.
   //! \details Undefined behavior if the cyclic_deque is full.
@@ -644,66 +672,80 @@ class cyclic_deque {
   constexpr void resize(size_type n) noexcept { impl_.resize(n); }
 
   //! \brief Return the maximum number of elements the cyclic_deque can hold.
-  constexpr size_type capacity() const noexcept { return impl_.capacity(); }
+  [[nodiscard]] constexpr size_type capacity() const noexcept {
+    return impl_.capacity();
+  }
 
   //! \brief Return the number of elements in the cyclic_deque.
-  constexpr size_type size() const noexcept { return impl_.size(); }
+  [[nodiscard]] constexpr size_type size() const noexcept {
+    return impl_.size();
+  }
 
   //! \brief Return the maximum number of elements the cyclic_deque is able to
   //! hold due to system or library implementation limitations.
   //! \details Because the cyclic_deque is a fixed-size container, the returned
   //! value equals that of the value returned by capacity().
-  constexpr size_type max_size() const noexcept { return impl_.capacity(); }
+  [[nodiscard]] constexpr size_type max_size() const noexcept {
+    return impl_.capacity();
+  }
 
   //! \brief Return the number of elements that can be inserted before the
   //! cyclic_deque is full. I.e., the unoccupied capacity, capapcity() - size().
-  constexpr size_type available() const noexcept { return impl_.available(); }
+  [[nodiscard]] constexpr size_type available() const noexcept {
+    return impl_.available();
+  }
 
   //! \brief Return true if the cyclic_deque is empty.
-  constexpr bool empty() const noexcept { return impl_.empty(); }
+  [[nodiscard]] constexpr bool empty() const noexcept { return impl_.empty(); }
 
   //! \brief Return true if the cyclic_deque is full.
-  constexpr bool full() const noexcept { return impl_.full(); }
+  [[nodiscard]] constexpr bool full() const noexcept { return impl_.full(); }
 
-  constexpr iterator begin() noexcept {
+  [[nodiscard]] constexpr iterator begin() noexcept {
     return iterator(&impl_, difference_type(0));
   }
 
-  constexpr const_iterator cbegin() const noexcept {
+  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {
     return const_iterator(&impl_, difference_type(0));
   }
 
-  constexpr const_iterator begin() const noexcept { return cbegin(); }
+  [[nodiscard]] constexpr const_iterator begin() const noexcept {
+    return cbegin();
+  }
 
-  constexpr iterator end() noexcept {
+  [[nodiscard]] constexpr iterator end() noexcept {
     return iterator(&impl_, static_cast<difference_type>(size()));
   }
 
-  constexpr const_iterator cend() const noexcept {
+  [[nodiscard]] constexpr const_iterator cend() const noexcept {
     return const_iterator(&impl_, static_cast<difference_type>(size()));
   }
 
-  constexpr const_iterator end() const noexcept { return cend(); }
+  [[nodiscard]] constexpr const_iterator end() const noexcept { return cend(); }
 
-  constexpr reverse_iterator rbegin() noexcept {
+  [[nodiscard]] constexpr reverse_iterator rbegin() noexcept {
     return reverse_iterator(end());
   }
 
-  constexpr const_reverse_iterator crbegin() const noexcept {
+  [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept {
     return const_reverse_iterator(cend());
   }
 
-  constexpr const_reverse_iterator rbegin() const noexcept { return crbegin(); }
+  [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept {
+    return crbegin();
+  }
 
-  constexpr reverse_iterator rend() noexcept {
+  [[nodiscard]] constexpr reverse_iterator rend() noexcept {
     return reverse_iterator(begin());
   }
 
-  constexpr const_reverse_iterator crend() const noexcept {
+  [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept {
     return const_reverse_iterator(cbegin());
   }
 
-  constexpr const_reverse_iterator rend() const noexcept { return crend(); }
+  [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept {
+    return crend();
+  }
 
  private:
   cyclic_impl impl_;
@@ -717,5 +759,58 @@ cyclic_deque(InputIterator_, InputIterator_, Allocator_ = Allocator_())
     -> cyclic_deque<
         typename std::iterator_traits<InputIterator_>::value_type,
         Allocator_>;
+
+//! \brief Return true if the size and elements of the cyclic_deques are equal.
+//! Linear complexity in the size of the cyclic_deques.
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator==(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  // TODO Can this be sped up using the underlying containers of both? Note that
+  // the deq_start of both could be at a different offset.
+  return (a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin()));
+}
+
+//! \see operator==(a, b)
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator!=(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  return !(a == b);
+}
+
+//! \brief Return true if \a a is lexicographically less than \a b. Linear
+//! complexity in the size of the cyclic_deques.
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator<(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  // TODO See the TODO of operator==().
+  return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end());
+}
+
+//! \see operator<(a, b)
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator>(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  return b < a;
+}
+
+//! \see operator<(a, b)
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator<=(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  return !(b < a);
+}
+
+//! \see operator<(a, b)
+template <typename T_, typename Allocator_>
+[[nodiscard]] constexpr bool operator>=(
+    cyclic_deque<T_, Allocator_> const& a,
+    cyclic_deque<T_, Allocator_> const& b) {
+  return !(a < b);
+}
 
 }  // namespace ouroboros
