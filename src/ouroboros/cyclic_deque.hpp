@@ -59,6 +59,26 @@ struct range_traits {
   using maybe_const_iterator = decltype(std::declval<range>().begin());
 };
 
+template <typename ContiguousAccessIterator_>
+class buffer_range {
+ public:
+  using iterator = ContiguousAccessIterator_;
+  using difference_type =
+      typename std::iterator_traits<iterator>::difference_type;
+
+  constexpr buffer_range(
+      ContiguousAccessIterator_ begin, ContiguousAccessIterator_ end)
+      : begin_(begin), end_(end) {}
+
+  [[nodiscard]] constexpr iterator begin() const noexcept { return begin_; }
+
+  [[nodiscard]] constexpr iterator end() const noexcept { return end_; }
+
+ private:
+  ContiguousAccessIterator_ begin_;
+  ContiguousAccessIterator_ end_;
+};
+
 // Allows delaying the calculation of the container size for the caller of the
 // constructor. This is useful in cases where the size is not available or
 // expensive to calculate. The size may not be available when the container (the
@@ -67,11 +87,14 @@ struct range_traits {
 // iterators, such as the one from an std::list.
 struct size_from_container_tag {};
 
+//! \brief A cyclic_deque that wraps Container_ but does not have its own
+//! iterators. Any of the iterators defined in this class are those of the
+//! container and they cannot be used cyclic traversal of the cyclic_deque_impl.
 template <typename Container_>
 class cyclic_deque_impl {
+ public:
   using container = Container_;
 
- public:
   using size_type = typename container::size_type;
   using difference_type = typename container::difference_type;
   using value_type = typename container::value_type;
@@ -343,6 +366,32 @@ class cyclic_deque_impl {
     deq_size = static_cast<size_type>(s + d);
   }
 
+ private:
+  constexpr buffer_range<const_iterator> buffer_range_one() const noexcept {
+    if (deq_start + deq_size >= buf.end()) {
+      return {deq_start, buf.end()};
+    } else {
+      return {deq_start, deq_finish};
+    }
+  }
+
+  constexpr buffer_range<const_iterator> buffer_range_two() const noexcept {
+    if (deq_start + deq_size >= buf.end()) {
+      return {buf.begin(), deq_finish};
+    } else {
+      return {deq_finish, deq_finish};
+    }
+  }
+
+ public:
+  template <typename OutputIterator_>
+  constexpr OutputIterator_ copy(OutputIterator_ output_begin) const {
+    auto range = buffer_range_one();
+    output_begin = std::copy(range.begin(), range.end(), output_begin);
+    range = buffer_range_two();
+    return std::copy(range.begin(), range.end(), output_begin);
+  }
+
   container buf;
   iterator deq_start;
   //! \brief One past-the-last element for the cycle. The value for deq_finish
@@ -477,6 +526,7 @@ template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 [[nodiscard]] constexpr bool operator==(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  // NOTE: Checks the index, not if the iterator came from the same cyclic_data.
   return a.base() == b.base();
 }
 
@@ -497,13 +547,6 @@ template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-[[nodiscard]] constexpr bool operator>(
-    cyclic_deque_iterator<DataL_, ConstL_> const& a,
-    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
-  return a.base() > b.base();
-}
-
-template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 [[nodiscard]] constexpr bool operator<(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
@@ -511,10 +554,10 @@ template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
-[[nodiscard]] constexpr bool operator>=(
+[[nodiscard]] constexpr bool operator>(
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
-  return a.base() >= b.base();
+  return a.base() > b.base();
 }
 
 template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
@@ -522,6 +565,13 @@ template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
     cyclic_deque_iterator<DataL_, ConstL_> const& a,
     cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
   return a.base() <= b.base();
+}
+
+template <typename DataL_, bool ConstL_, typename DataR_, bool ConstR_>
+[[nodiscard]] constexpr bool operator>=(
+    cyclic_deque_iterator<DataL_, ConstL_> const& a,
+    cyclic_deque_iterator<DataR_, ConstR_> const& b) noexcept {
+  return a.base() >= b.base();
 }
 
 }  // namespace internal
@@ -745,6 +795,33 @@ class cyclic_deque {
 
   [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept {
     return crend();
+  }
+
+  //! \brief Copy the elements of the cyclic_deque to the destination range
+  //! starting at \p output_begin. Works more efficiently than std::copy for a
+  //! cyclic_deque. Linear complexity in the size of the cyclic_deques. Results
+  //! in undefined behavior if \p output_begin is in the range of [begin(),
+  //! end()).
+  //! \details Internally calls std::copy twice on the two contiguous buffer
+  //! ranges that represent the linear cyclic_deque elements.
+  template <typename OutputIterator_>
+  constexpr OutputIterator_ copy(OutputIterator_ output_begin) const {
+    return impl_.copy(output_begin);
+  }
+
+  //! \brief Perform a left rotation on the elements of the cyclic_deque. Works
+  //! more efficiently than std::rotate on a cyclic_deque when it is full.
+  //! Constant complexity when the cyclic_deque is full, linear complexity in
+  //! the size of the cyclic_deque otherwise.
+  constexpr iterator rotate(iterator middle) {
+    if (impl_.full()) {
+      impl_.deq_start = impl_.wrap_cycle(impl_.deq_start + middle.base());
+      impl_.deq_finish = impl_.wrap_cycle(impl_.deq_start + impl_.deq_size);
+      return iterator(
+          &impl_, static_cast<difference_type>(impl_.deq_size) - middle.base());
+    } else {
+      return std::rotate(begin(), middle, end());
+    }
   }
 
  private:

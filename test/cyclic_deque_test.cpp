@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <ouroboros/cyclic_deque.hpp>
 
 namespace {
@@ -387,4 +388,43 @@ TEST(CyclicDequeTest, Ordering) {
   EXPECT_TRUE(cdeque_c > cdeque_d);
   EXPECT_TRUE(cdeque_b <= cdeque_c);
   EXPECT_TRUE(cdeque_b >= cdeque_c);
+}
+
+TEST(CyclicDequeTest, Copy) {
+  ouroboros::cyclic_deque cdeque = {42, 42, 42, 42};
+  cdeque.pop_back();
+  std::array<int, 4> a;
+
+  auto a_end = cdeque.copy(a.begin());
+  EXPECT_EQ(std::prev(a.end()), a_end);
+  EXPECT_TRUE(std::equal(cdeque.begin(), cdeque.end(), a.begin()));
+
+  cdeque.pop_front();
+  cdeque.append_range(std::initializer_list<int>{42, 42});
+
+  a_end = cdeque.copy(a.begin());
+  EXPECT_EQ(a.end(), a_end);
+  EXPECT_TRUE(std::equal(cdeque.begin(), cdeque.end(), a.begin()));
+}
+
+// The implementation handles rotation of the data differently when it's full
+// compared to not full. Both scenarios are tested.
+TEST(CyclicDequeTest, Rotate) {
+  ouroboros::cyclic_deque cdeque = {0, 1, 2, 3};
+  cdeque.pop_back();
+
+  auto old_first = cdeque.rotate(cdeque.begin() + 1);
+
+  EXPECT_EQ(*old_first, 0);
+  EXPECT_EQ(*cdeque.begin(), 1);
+  EXPECT_EQ(*std::prev(cdeque.end()), 0);
+
+  old_first = cdeque.rotate(cdeque.begin() + 2);
+
+  cdeque.push_back(3);
+  old_first = cdeque.rotate(cdeque.begin() + 1);
+
+  EXPECT_EQ(*old_first, 0);
+  EXPECT_EQ(*cdeque.begin(), 1);
+  EXPECT_EQ(*std::prev(cdeque.end()), 0);
 }
